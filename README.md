@@ -1,0 +1,1 @@
+A formal verification project for a simplified traffic system with a 3×3 grid road network. Models vehicle movement, traffic signal control, and intersection management to verify safety properties including collision avoidance, red-light compliance, and lane direction constraints. 
