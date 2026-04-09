@@ -1,0 +1,23 @@
+[project]
+name = "traffic-system-infra"
+version = "0.1.0"
+description = "Infrastructure (i-group) for a simplified traffic system formal verification project."
+readme = "README.md"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+web = [
+  "fastapi>=0.100",
+  "uvicorn[standard]>=0.22",
+]
+
+[project.scripts]
+traffic-infra = "traffic_infra.__main__:main"
+traffic-infra-web = "traffic_infra.web_app:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+

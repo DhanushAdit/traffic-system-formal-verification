@@ -1,0 +1,3 @@
+[console_scripts]
+traffic-infra = traffic_infra.__main__:main
+traffic-infra-web = traffic_infra.web_app:main

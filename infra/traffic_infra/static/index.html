@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Traffic system — visualizer</title>
+    <link rel="icon" href="/favicon.ico" type="image/svg+xml" />
+    <link rel="stylesheet" href="/assets/viz.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Traffic infrastructure · live view</h1>
+      <p class="tagline">
+        Python runs the simulation continuously; this page draws each snapshot. Use Stop / Resume to pause.
+        <span id="status" class="status">Loading…</span>
+      </p>
+    </header>
+
+    <div class="toolbar">
+      <button type="button" id="btn-step" class="primary">Step</button>
+      <button type="button" id="btn-reset">Reset</button>
+      <button type="button" id="btn-auto">Resume</button>
+      <button type="button" id="btn-stop" disabled>Stop</button>
+      <label class="gap"
+        >Interval (ms)
+        <input type="number" id="interval" value="300" min="50" step="50" width="4"
+      /></label>
+      <span class="step-label">Step <strong id="step-num">0</strong></span>
+    </div>
+
+    <div class="layout">
+      <section class="canvas-panel">
+        <canvas id="grid" width="760" height="560"></canvas>
+      </section>
+      <aside class="side-panel">
+        <h2>Cumulative</h2>
+        <ul id="cumulative" class="kv"></ul>
+        <h2>Last report</h2>
+        <pre id="report" class="json-box">—</pre>
+        <h2>Congestion</h2>
+        <pre id="congestion" class="json-box small">—</pre>
+        <p class="hint">
+          API:
+          <code>POST /api/step · POST /api/reset</code>
+        </p>
+      </aside>
+    </div>
+
+    <script src="/assets/viz.js"></script>
+  </body>
+</html>
