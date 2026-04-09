@@ -1,0 +1,340 @@
+# Traffic System Formal Verification — ECEN723 Spring 2026
+
+A discrete-time traffic simulator with runtime formal verification, built across two cooperating groups.
+
+---
+
+## What This Project Does
+
+Simulates a fleet of up to 20 autonomous cars moving on a **3×3 grid of intersections**. Every time step the infrastructure group emits traffic signals; the vehicle group reads those signals and moves each car. After every step, five safety properties are formally verified against the (before, after) car snapshots.
+
+The goal: maximize tour throughput while keeping **all five safety counters at zero** forever.
+
+---
+
+## Two Groups, One Interface
+
+```
+┌──────────────────────────┐   step_fn(prev, signals) → next     ┌──────────────────────────┐
+│        i-group           │ ────────────────────────────────▶   │        v-group           │
+│   traffic_infra/         │                                     │   traffic_vehicles/      │
+│                          │ ◀────────────────────────────────   │                          │
+│  • Generates signals     │         dict[car_id → CarState]     │  • Controls car fleet    │
+│  • Runs formal checks    │                                     │  • Plans optimal tours   │
+│  • Tracks metrics        │                                     │  • Enforces safety rules │
+└──────────────────────────┘                                     └──────────────────────────┘
+```
+
+| | i-group (`traffic_infra`) | v-group (`traffic_vehicles`) |
+|---|---|---|
+| **Owns** | Signals, safety rules, metrics | Cars, routing, movement logic |
+| **Produces** | `TrafficSignals` each step | `dict[car_id → CarState]` each step |
+| **Verifies** | 5 formal safety properties | Zero violations (enforced proactively) |
+
+---
+
+## The Grid
+
+```
+A(0,2)────(1,2)────D(2,2)
+  │                  │
+  │  (1,1) center    │
+  │                  │
+B(0,0)────(1,0)────C(2,0)
+```
+
+- **9 intersections** at integer coordinates (x, y) where x, y ∈ {0, 1, 2}
+- **24 directed edges** — every road link is two one-way lanes, one each direction
+- **30 slots** per edge — a car's discrete position within a segment (slot 0 = start, slot 29 = end)
+- **4 terminal corners**: A=(0,2) top-left, B=(0,0) bottom-left, C=(2,0) bottom-right, D=(2,2) top-right
+
+**Optimal tour A→B→C→D→A traces the square perimeter:**
+
+```
+A(0,2) →[south]→ (0,1) →[south]→ B(0,0)
+        →[east]→ (1,0) →[east]→  C(2,0)
+        →[north]→(2,1) →[north]→ D(2,2)
+        →[west]→ (1,2) →[west]→  A(0,2)
+```
+
+8 edges × 30 slots = **240 slots per full tour** (movement only).
+
+---
+
+## How One Simulation Step Works
+
+```
+Each step (= 2 real seconds):
+
+  ┌─[1] LightController.decide_signals(step_index)
+  │     Cycles [N, E, S, W] — all 9 intersections get the same green direction
+  └▶  TrafficSignals
+
+  ┌─[2] vehicle_step(prev_cars, signals, congestion_map)
+  │     Sort cars by slot DESC  →  closer to intersection = higher priority
+  │
+  │     For each car (in priority order):
+  │       slot < 29  →  advance to slot+1 (or stay if car is already there)
+  │       slot == 29 →  attempt intersection crossing:
+  │                       ① approach direction matches green signal?
+  │                       ② intersection not already reserved this step?
+  │                       ③ slot 0 of next edge is free?
+  │                       → all yes: cross, mark intersection as reserved
+  │                       → any no:  stay at slot 29
+  └▶  next_cars (new CarState for every car)
+
+  ┌─[3] evaluate_checks(prev_cars, next_cars, signals)
+  │     Checks 5 formal safety properties (see below)
+  └▶  ChecksReport
+
+  ┌─[4] stopped_cars_per_intersection(prev_cars, next_cars)
+  │     Cars that didn't move → congestion weights for next step's routing
+  └▶  congestion_map
+
+  [5] Fleet.apply_next_states(next_cars)
+        Detect tour completions (car returned to terminal A with all stops visited)
+        Remove completed cars; update congestion map
+
+  [6] Spawn a new car every spawn_interval steps (if slot 0 of start edge is free)
+```
+
+---
+
+## Traffic Signal Logic
+
+`LightController` (in [traffic_infra/light_control.py](traffic_infra/light_control.py)) cycles through four phases:
+
+| Step % 4 | `green_approach` | Cars that may cross | Active tour segment |
+|:---:|:---:|---|---|
+| 0 | `N` | South-bound (↓) | A→B — left side going down |
+| 1 | `E` | West-bound (←) | D→A — top side going left |
+| 2 | `S` | North-bound (↑) | C→D — right side going up |
+| 3 | `W` | East-bound (→) | B→C — bottom side going right |
+
+**How a car reads the signal:**  
+A car on edge (frm→to) traveling direction D approaches intersection `to` from `opposite(D)`.  
+It gets green if `opposite(D) == green_approach`.
+
+Example: car going East (D=E) has approach = opposite(E) = W. It crosses when `green_approach == W` (step % 4 == 3).
+
+Each side of the square tour gets a green window every 4 steps — a perfectly balanced cycle.
+
+---
+
+## Formal Verification: 5 Safety Properties
+
+Checked after **every single step** by `evaluate_checks()` in [traffic_infra/checks.py](traffic_infra/checks.py):
+
+### 1. No Collisions (`collision_count`)
+No two cars may occupy the same (edge, slot) at the same time.
+```
+For every position with k cars:  violations += k*(k-1)/2
+```
+Prevented by: slot-descending priority sort + `_car_ahead()` check before every move.
+
+### 2. Red Light Compliance (`red_light_violations`)
+A car may only cross an intersection when its approach direction has green.
+```
+Crossing detected: prev.edge ≠ next.edge  AND  prev.slot==29  AND  next.slot==0
+Violation if: signals.color_for(intersection, approach) ≠ GREEN
+```
+Prevented by: signal check in `Vehicle.decide_move()` before every crossing attempt.
+
+### 3. Legal Direction (`illegal_direction_count`)
+A car's `driving_dir` field must match the physical direction of the edge it is on.
+```
+Violation if: car.driving_dir ≠ car.edge.dir()
+```
+Prevented by: always assigning `driving_dir = next_edge.dir()` when a car crosses.
+
+### 4. No U-Turns (`u_turn_count`)
+A car may not immediately reverse direction back to the intersection it came from.
+```
+U-turn if: next.edge.to == prev.edge.frm
+```
+Prevented by: `get_turn_type()` check rejects `"uturn"` before every crossing.
+
+### 5. One Crossing Per Intersection Per Step (`intersection_crossing_violations`)
+At most one car may cross any given intersection in a single time step.
+```
+For every intersection with k crossings in one step:  violations += k-1
+```
+Prevented by: `intersection_crossing_reserved` set in `vehicle_step()` — first car claims it, rest wait.
+
+---
+
+## Vehicle Routing
+
+Every car plans the **shortest of all 6 orderings** of B, C, D ([traffic_vehicles/routing.py](traffic_vehicles/routing.py)):
+
+```python
+# Evaluate all 6 permutations, pick shortest total distance
+best_tour_order()  # → e.g. ["B", "C", "D"]
+
+# BFS shortest path for each leg: A→B, B→C, C→D, D→A
+get_full_path(order)  # → list[DirectedEdge] for the full tour
+
+# Dijkstra reroute when congestion changes mid-tour
+dynamic_reroute(current_intersection, remaining_destinations, congestion_map)
+```
+
+**Congestion-aware Dijkstra** edge weight:
+```
+edge_cost = SLOTS_PER_SEGMENT + congestion_count × 10
+```
+Cars avoid jammed intersections by paying 10× extra cost per stopped car nearby.
+
+---
+
+## Data Flow Between Files
+
+```
+LightController          light_control.py
+    │ TrafficSignals
+    ▼
+vehicle_step()           step.py  ←──────────── Vehicle.decide_move()   vehicle.py
+    │ dict[car_id→CarState]                          ↑
+    │                                         Fleet + routing            fleet.py, routing.py
+    ▼
+evaluate_checks()        checks.py  (i-group)
+    │ ChecksReport
+    ▼
+CumulativeMetrics        simulation.py
+    │
+    ▼
+stopped_cars_per_intersection()  congestion.py
+    │ congestion_map
+    └──────────────────────────▶  vehicle_step() (next iteration)
+```
+
+---
+
+## File Reference
+
+### `traffic_infra/` — Infrastructure Group
+
+| File | What it does |
+|---|---|
+| [simulation.py](traffic_infra/simulation.py) | `InfraSimulation`: outer loop (decide → step_fn → report); `CumulativeMetrics` accumulator |
+| [igroupsim.py](traffic_infra/igroupsim.py) | `IGroup`: bridges `LightController` ↔ `evaluate_checks`; tracks step index |
+| [light_control.py](traffic_infra/light_control.py) | `LightController`: rotating-green signal policy; `cycle_green(step)` |
+| [checks.py](traffic_infra/checks.py) | `evaluate_checks()`: all 5 formal property checkers; `ChecksReport` dataclass |
+| [congestion.py](traffic_infra/congestion.py) | `stopped_cars_per_intersection()`: congestion map for Dijkstra |
+| [state.py](traffic_infra/state.py) | Core types: `CarState`, `TrafficSignals`, `LightColor`, `IntersectionLight` |
+| [geometry.py](traffic_infra/geometry.py) | `Dir` enum, `DirectedEdge`, `Intersection` type, `grid_intersections()`, `directed_edges()` |
+| [protocol.py](traffic_infra/protocol.py) | JSON serialization for `CarState` and `TrafficSignals` |
+| [stub_vehicle.py](traffic_infra/stub_vehicle.py) | Demo `step_fn`: advances 1 slot/step, ignores signals (placeholder only) |
+| [web_app.py](traffic_infra/web_app.py) | FastAPI + WebSocket server; `SimulationSession` for step/reset; serves `static/index.html` |
+| [constants.py](traffic_infra/constants.py) | `SLOTS_PER_SEGMENT = 30`, `CONTROL_STEP_SECONDS = 2` |
+
+### `traffic_vehicles/` — Vehicle Group
+
+| File | What it does |
+|---|---|
+| [step.py](traffic_vehicles/step.py) | `vehicle_step()`: the `StepFn` i-group calls; manages `_fleet_registry` across calls |
+| [vehicle.py](traffic_vehicles/vehicle.py) | `Vehicle` state machine: `decide_move()`, `_pick_next_edge()`, `_car_ahead()`, `_advance_path()` |
+| [fleet.py](traffic_vehicles/fleet.py) | `Fleet`: spawning at terminal A, tour completion detection, throughput calculation |
+| [routing.py](traffic_vehicles/routing.py) | `best_tour_order()`, `get_full_path()`, `dynamic_reroute()` (Dijkstra with congestion) |
+| [network.py](traffic_vehicles/network.py) | 3×3 graph: `bfs_shortest_path()`, `get_valid_next_edges()`, `get_turn_type()` |
+| [verifier.py](traffic_vehicles/verifier.py) | `VGroupVerifier`: wraps `evaluate_checks()`, accumulates totals across all steps |
+| [simulation.py](traffic_vehicles/simulation.py) | `VGroupSimulation.run()`: standalone Phase A loop; `SimulationResult` dataclass |
+| [constants.py](traffic_vehicles/constants.py) | `MAX_CARS = 20`, `TERMINALS = {A:(0,2), B:(0,0), C:(2,0), D:(2,2)}` |
+| [__main__.py](traffic_vehicles/__main__.py) | CLI: `--steps`, `--cars`, `--spawn-interval`, `--verbose` flags |
+
+---
+
+## Install
+
+```bash
+# From repo root (vehicle branch)
+pip install -e .
+
+# With web UI support
+pip install -e ".[web]"
+```
+
+The `traffic_infra` package must be importable. Either install it from the `infra` branch or ensure it is in the same directory.
+
+---
+
+## Run
+
+### Phase A — Standalone v-group simulation
+
+```bash
+python -m traffic_vehicles --steps 1800 --cars 4 --spawn-interval 5
+```
+
+Expected output:
+```
+Step  300 | cars= 20 | completed_tours=16  | collisions=0
+Step  600 | cars= 20 | completed_tours=40  | collisions=0
+Step 1800 | cars= 20 | completed_tours=144 | collisions=0
+
+=== SimulationResult ===
+  total_steps                     : 1800
+  completed_tours                 : 144
+  throughput_per_hour             : 144.0000
+  collision_count                 : 0
+  red_light_violations            : 0
+  illegal_direction_count         : 0
+  u_turn_count                    : 0
+  intersection_crossing_violations: 0
+```
+
+### Phase B — Integrated with i-group
+
+```python
+from traffic_infra.simulation import InfraSimulation
+from traffic_vehicles.step import vehicle_step
+from traffic_vehicles.fleet import Fleet
+
+fleet = Fleet()
+for _ in range(4):
+    fleet.spawn_car()
+initial = fleet.get_all_car_states()
+
+sim = InfraSimulation()
+final_states = sim.run_steps(initial=initial, step_fn=vehicle_step, num_steps=1800)
+print("Violations:", sim.cumulative)
+```
+
+### Web UI / Visualization
+
+```bash
+# Python server (uses stub vehicle, step-by-step)
+python -m traffic_infra.web_app --port 8765
+# Open http://127.0.0.1:8765
+```
+
+Or open [traffic_infra/static/index.html](traffic_infra/static/index.html) **directly in any browser** — it runs a full self-contained JS simulation with no Python server needed.
+
+---
+
+## Run Tests
+
+```bash
+python -m pytest tests/ -v
+```
+
+| Test file | What it covers |
+|---|---|
+| `tests/test_network.py` (12) | Grid structure, BFS paths, turn types, neighbor lookup |
+| `tests/test_routing.py` (6) | Tour permutations, path lengths, Dijkstra with congestion |
+| `tests/test_vehicle.py` (6) | Signal obedience, following distance, U-turn prevention |
+| `tests/test_fleet.py` (8) | Spawning, MAX_CARS cap, tour completion detection, throughput |
+| `tests/test_verifier.py` (7) | All 5 formal property checkers |
+
+---
+
+## Key Numbers
+
+| Parameter | Value | Notes |
+|---|---|---|
+| `SLOTS_PER_SEGMENT` | 30 | Discrete positions per road segment |
+| `CONTROL_STEP_SECONDS` | 2 | Wall-clock time per simulation step |
+| `MAX_CARS` | 20 | Fleet cap |
+| Signal cycle | 4 steps (8 s) | Full N→E→S→W rotation |
+| Tour (movement) | 240 slots | 8 edges × 30 slots |
+| Tour (with waits) | ~252 steps | Avg 1.5 steps wait at each of 8 intersections |
+| Throughput target | ~144 tours/hr | 20 cars at steady state |

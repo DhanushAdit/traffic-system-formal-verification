@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traffic System Simulation — ECEN723</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Courier New', monospace;
+  background: #0d1117;
+  color: #c9d1d9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 20px 16px 40px;
+}
+
+h1 {
+  font-size: 0.95rem;
+  color: #58a6ff;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+  text-align: center;
+}
+.subtitle {
+  font-size: 0.68rem;
+  color: #484f58;
+  letter-spacing: 1px;
+  margin-bottom: 18px;
+  text-align: center;
+}
+
+.layout {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+canvas {
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  display: block;
+}
+
+.panel {
+  width: 236px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.card {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  padding: 11px 13px;
+}
+.card h3 {
+  font-size: 0.63rem;
+  color: #58a6ff;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 9px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #21262d;
+}
+
+.btn-row { display: flex; gap: 5px; }
+button {
+  flex: 1;
+  padding: 7px 4px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #21262d;
+  color: #c9d1d9;
+  font-family: 'Courier New', monospace;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+button:hover { background: #2d333b; border-color: #58a6ff; }
+button.on  { background: #1f4a2a; border-color: #3fb950; color: #3fb950; }
+
+.speed-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+}
+.speed-row label { font-size: 0.68rem; color: #6e7681; white-space: nowrap; }
+input[type=range] { flex: 1; accent-color: #58a6ff; }
+#spd-lbl { font-size: 0.68rem; color: #c9d1d9; min-width: 26px; text-align: right; }
+
+.step-big {
+  font-size: 2rem;
+  color: #58a6ff;
+  text-align: center;
+  letter-spacing: 4px;
+  font-weight: bold;
+  line-height: 1;
+}
+.step-sub {
+  font-size: 0.63rem;
+  color: #484f58;
+  text-align: center;
+  margin-top: 4px;
+}
+
+.sig-box { display: flex; align-items: center; gap: 10px; }
+.sig-arrow {
+  font-size: 1.7rem;
+  color: #3fb950;
+  line-height: 1;
+  min-width: 26px;
+  text-align: center;
+}
+.sig-dir  { font-size: 0.85rem; color: #e6edf3; font-weight: bold; }
+.sig-desc { font-size: 0.63rem; color: #6e7681; margin-top: 2px; }
+
+.phase-dots { display: flex; gap: 5px; margin-top: 9px; }
+.phase-dot {
+  flex: 1; height: 5px;
+  border-radius: 3px;
+  background: #21262d;
+  transition: background 0.2s;
+}
+.phase-dot.on { background: #3fb950; }
+
+.metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  border-bottom: 1px solid #0d1117;
+  font-size: 0.76rem;
+}
+.metric:last-child { border-bottom: none; }
+.mlabel { color: #6e7681; }
+.mval   { font-weight: bold; color: #e6edf3; }
+.mval.ok  { color: #3fb950; }
+.mval.bad { color: #f85149; }
+
+.leg { display: flex; align-items: center; gap: 7px; font-size: 0.68rem; color: #8b949e; margin-bottom: 5px; }
+.leg:last-child { margin-bottom: 0; }
+.ldot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.lbar { width:22px; height:7px; border-radius:2px; flex-shrink:0; }
+</style>
+</head>
+<body>
+
+<h1>Traffic System Formal Verification</h1>
+<div class="subtitle">ECEN723 · Spring 2026 · All 6 permutations: A→B/C/D→A (no server needed)</div>
+
+<div class="layout">
+
+  <canvas id="sim" width="520" height="520"></canvas>
+
+  <div class="panel">
+
+    <div class="card">
+      <h3>Simulation Time</h3>
+      <div class="step-big" id="sd">0000</div>
+      <div class="step-sub">x 2 s = <span id="et">0 s</span> &nbsp;|&nbsp; <span id="min">0 min</span></div>
+    </div>
+
+    <div class="card">
+      <h3>Controls</h3>
+      <div class="btn-row">
+        <button onclick="doStep()">Step</button>
+        <button id="btn-auto" onclick="toggleAuto()">Auto</button>
+        <button onclick="doReset()">Reset</button>
+      </div>
+      <div class="speed-row">
+        <label>Speed</label>
+        <input type="range" id="spd" min="1" max="40" value="8">
+        <span id="spd-lbl">8x</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Current Traffic Signal</h3>
+      <div class="sig-box">
+        <div class="sig-arrow" id="sa">down</div>
+        <div>
+          <div class="sig-dir"  id="sd2">South-bound GREEN</div>
+          <div class="sig-desc" id="sd3">Approach N · Phase 0</div>
+        </div>
+      </div>
+      <div class="phase-dots">
+        <div class="phase-dot on" id="ph0"></div>
+        <div class="phase-dot"    id="ph1"></div>
+        <div class="phase-dot"    id="ph2"></div>
+        <div class="phase-dot"    id="ph3"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Fleet</h3>
+      <div class="metric"><span class="mlabel">Active cars</span>    <span class="mval" id="m0">0 / 20</span></div>
+      <div class="metric"><span class="mlabel">Completed tours</span> <span class="mval" id="m1">0</span></div>
+      <div class="metric"><span class="mlabel">Throughput / hr</span> <span class="mval" id="m2">0.0</span></div>
+      <div class="metric"><span class="mlabel">Total spawned</span>   <span class="mval" id="m3">0</span></div>
+    </div>
+
+    <div class="card">
+      <h3>Formal Safety Checks</h3>
+      <div class="metric"><span class="mlabel">No collisions</span>        <span class="mval ok" id="c0">0</span></div>
+      <div class="metric"><span class="mlabel">Red light violations</span> <span class="mval ok" id="c1">0</span></div>
+      <div class="metric"><span class="mlabel">Illegal directions</span>   <span class="mval ok" id="c2">0</span></div>
+      <div class="metric"><span class="mlabel">U-turns</span>              <span class="mval ok" id="c3">0</span></div>
+      <div class="metric"><span class="mlabel">Crossing violations</span>  <span class="mval ok" id="c4">0</span></div>
+    </div>
+
+    <div class="card">
+      <h3>Legend</h3>
+      <div class="leg"><div class="ldot" style="background:#ffd700;box-shadow:0 0 0 2px #b8860b;"></div> Terminal (A / B / C / D)</div>
+      <div class="leg"><div class="ldot" style="background:#3fb950;"></div> Green approach light</div>
+      <div class="leg"><div class="ldot" style="background:#f85149;"></div> Red approach light</div>
+      <div class="leg"><div class="lbar" style="background:#58a6ff;opacity:0.5;"></div> Tour 0: A-&gt;B-&gt;C-&gt;D-&gt;A</div>
+      <div class="leg"><div class="lbar" style="background:#3fb950;opacity:0.5;"></div> Tour 1: A-&gt;B-&gt;D-&gt;C-&gt;A</div>
+      <div class="leg"><div class="lbar" style="background:#ffd700;opacity:0.5;"></div> Tour 2: A-&gt;C-&gt;B-&gt;D-&gt;A</div>
+      <div class="leg"><div class="lbar" style="background:#f85149;opacity:0.5;"></div> Tour 3: A-&gt;C-&gt;D-&gt;B-&gt;A</div>
+      <div class="leg"><div class="lbar" style="background:#dda0dd;opacity:0.5;"></div> Tour 4: A-&gt;D-&gt;B-&gt;C-&gt;A</div>
+      <div class="leg"><div class="lbar" style="background:#4ecdc4;opacity:0.5;"></div> Tour 5: A-&gt;D-&gt;C-&gt;B-&gt;A</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+"use strict";
+// ═══════════════════════════════════════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════
+const SLOTS       = 30;
+const MAX_CARS    = 20;
+const CELL        = 158;
+const PAD         = 82;
+const CW          = 520;
+const LANE        = 9;
+const IR          = 15;
+const CR          = 8;
+const SPAWN_EVERY = 5;
+const NUM_INIT    = 4;
+
+const TERMINALS = { A:[0,2], B:[0,0], C:[2,0], D:[2,2] };
+
+// All 6 right-turn-free, U-turn-free permutations from Python multi-waypoint BFS
+const ALL_TOURS = [
+  // Tour 0: A->B->C->D->A  (8 edges)
+  [{"frm":[0,2],"to":[0,1]},{"frm":[0,1],"to":[0,0]},{"frm":[0,0],"to":[1,0]},{"frm":[1,0],"to":[2,0]},{"frm":[2,0],"to":[2,1]},{"frm":[2,1],"to":[2,2]},{"frm":[2,2],"to":[1,2]},{"frm":[1,2],"to":[0,2]}],
+  // Tour 1: A->B->D->C->A  (14 edges)
+  [{"frm":[0,2],"to":[0,1]},{"frm":[0,1],"to":[0,0]},{"frm":[0,0],"to":[1,0]},{"frm":[1,0],"to":[2,0]},{"frm":[2,0],"to":[2,1]},{"frm":[2,1],"to":[2,2]},{"frm":[2,2],"to":[1,2]},{"frm":[1,2],"to":[1,1]},{"frm":[1,1],"to":[1,0]},{"frm":[1,0],"to":[2,0]},{"frm":[2,0],"to":[2,1]},{"frm":[2,1],"to":[2,2]},{"frm":[2,2],"to":[1,2]},{"frm":[1,2],"to":[0,2]}],
+  // Tour 2: A->C->B->D->A  (14 edges)
+  [{"frm":[0,2],"to":[0,1]},{"frm":[0,1],"to":[0,0]},{"frm":[0,0],"to":[1,0]},{"frm":[1,0],"to":[2,0]},{"frm":[2,0],"to":[2,1]},{"frm":[2,1],"to":[1,1]},{"frm":[1,1],"to":[0,1]},{"frm":[0,1],"to":[0,0]},{"frm":[0,0],"to":[1,0]},{"frm":[1,0],"to":[2,0]},{"frm":[2,0],"to":[2,1]},{"frm":[2,1],"to":[2,2]},{"frm":[2,2],"to":[1,2]},{"frm":[1,2],"to":[0,2]}],
+  // Tour 3: A->C->D->B->A  (14 edges)
+  [{"frm":[0,2],"to":[0,1]},{"frm":[0,1],"to":[0,0]},{"frm":[0,0],"to":[1,0]},{"frm":[1,0],"to":[2,0]},{"frm":[2,0],"to":[2,1]},{"frm":[2,1],"to":[2,2]},{"frm":[2,2],"to":[1,2]},{"frm":[1,2],"to":[0,2]},{"frm":[0,2],"to":[0,1]},{"frm":[0,1],"to":[0,0]},{"frm":[0,0],"to":[1,0]},{"frm":[1,0],"to":[1,1]},{"frm":[1,1],"to":[1,2]},{"frm":[1,2],"to":[0,2]}],
+  // Tour 4: A->D->B->C->A  (14 edges)
+  [{"frm":[0,2],"to":[0,1]},{"frm":[0,1],"to":[1,1]},{"frm":[1,1],"to":[2,1]},{"frm":[2,1],"to":[2,2]},{"frm":[2,2],"to":[1,2]},{"frm":[1,2],"to":[0,2]},{"frm":[0,2],"to":[0,1]},{"frm":[0,1],"to":[0,0]},{"frm":[0,0],"to":[1,0]},{"frm":[1,0],"to":[2,0]},{"frm":[2,0],"to":[2,1]},{"frm":[2,1],"to":[2,2]},{"frm":[2,2],"to":[1,2]},{"frm":[1,2],"to":[0,2]}],
+  // Tour 5: A->D->C->B->A  (16 edges)
+  [{"frm":[0,2],"to":[0,1]},{"frm":[0,1],"to":[1,1]},{"frm":[1,1],"to":[2,1]},{"frm":[2,1],"to":[2,2]},{"frm":[2,2],"to":[1,2]},{"frm":[1,2],"to":[1,1]},{"frm":[1,1],"to":[1,0]},{"frm":[1,0],"to":[2,0]},{"frm":[2,0],"to":[2,1]},{"frm":[2,1],"to":[1,1]},{"frm":[1,1],"to":[0,1]},{"frm":[0,1],"to":[0,0]},{"frm":[0,0],"to":[1,0]},{"frm":[1,0],"to":[1,1]},{"frm":[1,1],"to":[1,2]},{"frm":[1,2],"to":[0,2]}],
+];
+
+const TOUR_LABELS = [
+  'A->B->C->D->A','A->B->D->C->A','A->C->B->D->A',
+  'A->C->D->B->A','A->D->B->C->A','A->D->C->B->A',
+];
+
+// Glow colours for the 6 tour paths drawn on the grid
+const TOUR_GLOW = [
+  'rgba(88,166,255,0.18)',   // blue
+  'rgba(63,185,80,0.15)',    // green
+  'rgba(255,215,0,0.13)',    // gold
+  'rgba(248,81,73,0.13)',    // red
+  'rgba(221,160,221,0.15)', // plum
+  'rgba(77,209,196,0.15)',  // teal
+];
+
+// Car body colours (cycle through palette)
+const PALETTE = [
+  '#ff6b6b','#4ecdc4','#45b7d1','#ffa07a','#98d8c8',
+  '#dda0dd','#90ee90','#f0e68c','#87ceeb','#ff69b4',
+  '#20b2aa','#ffd700','#9370db','#3cb371','#ff8c00',
+  '#00ced1','#dc143c','#228b22','#8b008b','#ff7f50',
+];
+
+// Light phase cycle matches Python DIR_CYCLE = [N, E, S, W]
+const DIR_CYCLE = ['N','E','S','W'];
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════════════════
+let stepIdx   = 0;
+// car: { id, tourIdx, edgeIdx, slot, color }
+let cars      = [];
+let nextId    = 1;
+let permCtr   = 0;   // round-robin across ALL_TOURS
+let spawned   = 0;
+let tours     = 0;
+let viol      = { col:0, red:0, ill:0, utn:0, crs:0 };
+let playing   = false;
+let timer     = null;
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  GEOMETRY
+// ═══════════════════════════════════════════════════════════════════════════
+const gx = x => PAD + x * CELL;
+const gy = y => PAD + (2 - y) * CELL;   // flip y: grid-y up = screen-y down
+
+function edgeDir(e) {
+  const dx = e.to[0] - e.frm[0], dy = e.to[1] - e.frm[1];
+  return dx > 0 ? 'E' : dx < 0 ? 'W' : dy > 0 ? 'N' : 'S';
+}
+const opp = d => ({N:'S', S:'N', E:'W', W:'E'}[d]);
+
+// Physical edge identity key (frm x,y -> to x,y)
+function eKey(e) { return `${e.frm[0]},${e.frm[1]}-${e.to[0]},${e.to[1]}`; }
+function carEdge(c) { return ALL_TOURS[c.tourIdx][c.edgeIdx]; }
+function carEKey(c) { return eKey(carEdge(c)); }
+
+// Canvas pixel for a car at (tourIdx, edgeIdx, slot) — right-hand lane
+function carPx(c) {
+  const e  = carEdge(c);
+  const x1 = gx(e.frm[0]), y1 = gy(e.frm[1]);
+  const x2 = gx(e.to[0]),  y2 = gy(e.to[1]);
+  const t  = c.slot / (SLOTS - 1);
+  let cx = x1 + t * (x2 - x1), cy = y1 + t * (y2 - y1);
+  const d = edgeDir(e);
+  if (d === 'E') cy += LANE; if (d === 'W') cy -= LANE;
+  if (d === 'N') cx += LANE; if (d === 'S') cx -= LANE;
+  return [cx, cy];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SIMULATION STEP
+// ═══════════════════════════════════════════════════════════════════════════
+function simStep() {
+  const green    = DIR_CYCLE[stepIdx % 4];
+  const reserved = new Set();   // intersection keys claimed this step
+  const crossed  = {};          // interKey -> crossing count this step
+
+  // Higher slot = closer to intersection = higher priority (matches Python)
+  const sorted = [...cars].sort((a, b) => b.slot - a.slot);
+  const next   = [];
+
+  for (const car of sorted) {
+    const tour = ALL_TOURS[car.tourIdx];
+
+    if (car.slot < SLOTS - 1) {
+      // On-edge: advance 1 slot unless physical slot ahead is taken
+      const ns      = car.slot + 1;
+      const blocked = next.some(n => carEKey(n) === carEKey(car) && n.slot === ns);
+      next.push(blocked ? {...car} : {...car, slot: ns});
+
+    } else {
+      // Slot 29: attempt intersection crossing
+      const e       = carEdge(car);
+      const approach = opp(edgeDir(e));          // direction FROM WHICH car enters intersection
+      const iKey    = `${e.to[0]},${e.to[1]}`;
+      const nxIdx   = car.edgeIdx + 1;
+      const done    = nxIdx >= tour.length;       // returning to A = tour complete
+
+      const sigOk   = approach === green;
+      const notUsed = !reserved.has(iKey);
+
+      let freeSlot = true;
+      if (!done) {
+        const nxEdge = tour[nxIdx];
+        freeSlot = !next.some(n => eKey(carEdge(n)) === eKey(nxEdge) && n.slot === 0);
+      }
+
+      if (sigOk && notUsed && freeSlot) {
+        reserved.add(iKey);
+        crossed[iKey] = (crossed[iKey] || 0) + 1;
+        if (done) {
+          tours++;   // car removed — tour complete
+        } else {
+          next.push({...car, edgeIdx: nxIdx, slot: 0});
+        }
+      } else {
+        next.push({...car});
+      }
+    }
+  }
+
+  // Safety check: collisions
+  const posMap = {};
+  for (const n of next) {
+    const k = `${carEKey(n)},${n.slot}`;
+    posMap[k] = (posMap[k] || 0) + 1;
+  }
+  for (const k of Object.values(posMap))
+    if (k >= 2) viol.col += (k * (k - 1)) / 2;
+
+  // Safety check: crossing violations (>1 car through same intersection same step)
+  for (const k of Object.values(crossed))
+    if (k >= 2) viol.crs += k - 1;
+
+  cars = next;
+  stepIdx++;
+  if (stepIdx % SPAWN_EVERY === 0) trySpawn();
+}
+
+function trySpawn() {
+  if (cars.length >= MAX_CARS) return;
+  const tourIdx = permCtr % ALL_TOURS.length;
+  const tour    = ALL_TOURS[tourIdx];
+  const firstEdgeKey = eKey(tour[0]);
+  // Slot 0 of the first edge must be free
+  if (cars.some(c => eKey(carEdge(c)) === firstEdgeKey && c.slot === 0)) return;
+  cars.push({ id: nextId++, tourIdx, edgeIdx: 0, slot: 0,
+              color: PALETTE[(nextId - 2) % PALETTE.length] });
+  spawned++;
+  permCtr++;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  CONTROLS
+// ═══════════════════════════════════════════════════════════════════════════
+function doStep()  { simStep(); render(); updateUI(); }
+
+function doReset() {
+  stopAuto();
+  stepIdx = 0; cars = []; nextId = 1; permCtr = 0;
+  spawned = 0; tours = 0;
+  viol = {col:0, red:0, ill:0, utn:0, crs:0};
+  // Spawn NUM_INIT initial cars on the first NUM_INIT permutations
+  for (let i = 0; i < NUM_INIT; i++) {
+    const tourIdx = permCtr % ALL_TOURS.length;
+    cars.push({ id: nextId++, tourIdx, edgeIdx: 0, slot: i * 3,
+                color: PALETTE[(nextId - 2) % PALETTE.length] });
+    spawned++;
+    permCtr++;
+  }
+  render(); updateUI();
+}
+
+function toggleAuto() { playing ? stopAuto() : startAuto(); }
+
+function startAuto() {
+  playing = true;
+  document.getElementById('btn-auto').textContent = 'Pause';
+  document.getElementById('btn-auto').classList.add('on');
+  tick();
+}
+function stopAuto() {
+  playing = false;
+  document.getElementById('btn-auto').textContent = 'Auto';
+  document.getElementById('btn-auto').classList.remove('on');
+  if (timer) { clearTimeout(timer); timer = null; }
+}
+function tick() {
+  if (!playing) return;
+  doStep();
+  const spd = parseInt(document.getElementById('spd').value);
+  timer = setTimeout(tick, Math.max(15, Math.round(1000 / spd)));
+}
+document.getElementById('spd').addEventListener('input', function() {
+  document.getElementById('spd-lbl').textContent = this.value + 'x';
+  if (playing) { stopAuto(); startAuto(); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  RENDERING
+// ═══════════════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('sim');
+const ctx    = canvas.getContext('2d');
+
+// All 12 undirected grid links (3x3 grid)
+const LINKS = [
+  [[0,0],[1,0]],[[1,0],[2,0]],
+  [[0,1],[1,1]],[[1,1],[2,1]],
+  [[0,2],[1,2]],[[1,2],[2,2]],
+  [[0,0],[0,1]],[[0,1],[0,2]],
+  [[1,0],[1,1]],[[1,1],[1,2]],
+  [[2,0],[2,1]],[[2,1],[2,2]],
+];
+
+function render() {
+  ctx.clearRect(0, 0, CW, CW);
+  ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, CW, CW);
+  drawRoads();
+  drawTourGlows();
+  drawLights();
+  drawIntersections();
+  drawTerminals();
+  drawCars();
+  drawHUD();
+}
+
+function drawRoads() {
+  for (const [a, b] of LINKS) {
+    // Road surface
+    ctx.beginPath();
+    ctx.moveTo(gx(a[0]), gy(a[1])); ctx.lineTo(gx(b[0]), gy(b[1]));
+    ctx.strokeStyle = '#1c2128'; ctx.lineWidth = 28; ctx.lineCap = 'square'; ctx.stroke();
+    // Centre dash
+    ctx.setLineDash([6, 10]);
+    ctx.beginPath();
+    ctx.moveTo(gx(a[0]), gy(a[1])); ctx.lineTo(gx(b[0]), gy(b[1]));
+    ctx.strokeStyle = '#2d333b'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function drawTourGlows() {
+  // Draw each of the 6 tour paths as a faint coloured overlay
+  for (let ti = 0; ti < ALL_TOURS.length; ti++) {
+    const tour = ALL_TOURS[ti];
+    ctx.save();
+    ctx.strokeStyle = TOUR_GLOW[ti];
+    ctx.lineWidth   = 10;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.beginPath();
+    for (let ei = 0; ei < tour.length; ei++) {
+      const e  = tour[ei];
+      const d  = edgeDir(e);
+      let sx   = gx(e.frm[0]), sy = gy(e.frm[1]);
+      let ex   = gx(e.to[0]),  ey = gy(e.to[1]);
+      // Offset into the right-hand lane
+      if (d === 'E') { sy += LANE; ey += LANE; }
+      if (d === 'W') { sy -= LANE; ey -= LANE; }
+      if (d === 'N') { sx += LANE; ex += LANE; }
+      if (d === 'S') { sx -= LANE; ex -= LANE; }
+      if (ei === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+      ctx.lineTo(ex, ey);
+    }
+    ctx.stroke();
+    // Draw a small direction arrow at the midpoint of each edge
+    for (const e of tour) {
+      const d  = edgeDir(e);
+      let mx   = (gx(e.frm[0]) + gx(e.to[0])) / 2;
+      let my   = (gy(e.frm[1]) + gy(e.to[1])) / 2;
+      if (d === 'E') my += LANE; if (d === 'W') my -= LANE;
+      if (d === 'N') mx += LANE; if (d === 'S') mx -= LANE;
+      const angle = {E:0, W:Math.PI, N:-Math.PI/2, S:Math.PI/2}[d];
+      ctx.save();
+      ctx.translate(mx, my); ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.moveTo(6, 0); ctx.lineTo(-4, -3.5); ctx.lineTo(-4, 3.5);
+      ctx.closePath();
+      ctx.fillStyle = TOUR_GLOW[ti].replace('0.1', '0.5').replace('0.13','0.5').replace('0.15','0.5').replace('0.18','0.5');
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+}
+
+function drawLights() {
+  // Green/red dot at 80% along every active tour edge — per signal phase
+  const green = DIR_CYCLE[stepIdx % 4];
+  // Collect all unique physical edges across all tours
+  const seen = new Set();
+  for (const tour of ALL_TOURS) {
+    for (const e of tour) {
+      const k = eKey(e);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const d       = edgeDir(e);
+      const isGreen = opp(d) === green;
+      const x1 = gx(e.frm[0]), y1 = gy(e.frm[1]);
+      const x2 = gx(e.to[0]),  y2 = gy(e.to[1]);
+      const t  = 0.80;
+      let lx = x1 + t * (x2 - x1), ly = y1 + t * (y2 - y1);
+      if (d === 'E') ly += LANE; if (d === 'W') ly -= LANE;
+      if (d === 'N') lx += LANE; if (d === 'S') lx -= LANE;
+      ctx.beginPath(); ctx.arc(lx, ly, 6, 0, Math.PI * 2);
+      ctx.fillStyle = isGreen ? 'rgba(63,185,80,0.15)' : 'rgba(248,81,73,0.12)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(lx, ly, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = isGreen ? '#3fb950' : '#f85149'; ctx.fill();
+    }
+  }
+}
+
+function drawIntersections() {
+  for (let x = 0; x < 3; x++) for (let y = 0; y < 3; y++) {
+    const sx = gx(x), sy = gy(y);
+    ctx.beginPath(); ctx.arc(sx, sy, IR, 0, Math.PI * 2);
+    ctx.fillStyle = '#161b22'; ctx.fill();
+    ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.font = '8.5px Courier New'; ctx.fillStyle = '#484f58';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(`${x},${y}`, sx, sy);
+  }
+}
+
+function drawTerminals() {
+  for (const [name, [x, y]] of Object.entries(TERMINALS)) {
+    const sx = gx(x), sy = gy(y);
+    ctx.beginPath(); ctx.arc(sx, sy, IR + 6, 0, Math.PI * 2);
+    ctx.strokeStyle = '#7d6608'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(sx, sy, IR + 4, 0, Math.PI * 2);
+    ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.font = 'bold 13px Courier New'; ctx.fillStyle = '#ffd700';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(name, sx, sy);
+    const off = {A:[-40,-38], B:[-40,38], C:[40,38], D:[40,-38]}[name];
+    ctx.font = '9px Courier New'; ctx.fillStyle = '#7d6608';
+    ctx.fillText(`Terminal ${name}`, sx + off[0], sy + off[1]);
+  }
+}
+
+function drawCars() {
+  for (const car of cars) {
+    const [cx, cy] = carPx(car);
+    // Shadow
+    ctx.beginPath(); ctx.arc(cx + 1.5, cy + 1.5, CR, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fill();
+    // Body
+    ctx.beginPath(); ctx.arc(cx, cy, CR, 0, Math.PI * 2);
+    ctx.fillStyle = car.color; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
+    // ID label
+    ctx.font = 'bold 6.5px Courier New'; ctx.fillStyle = '#000';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(car.id), cx, cy);
+  }
+}
+
+function drawHUD() {
+  const green = DIR_CYCLE[stepIdx % 4];
+  const phaseDesc = {
+    N:'South-bound GREEN (approach N)',
+    E:'West-bound GREEN (approach E)',
+    S:'North-bound GREEN (approach S)',
+    W:'East-bound GREEN (approach W)',
+  }[green];
+  ctx.font = '10px Courier New'; ctx.fillStyle = '#3fb950';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  ctx.fillText(phaseDesc, CW - 8, 8);
+
+  ctx.fillStyle = '#3b434e';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+  ctx.fillText(`step ${stepIdx}  |  2 s/step  |  ${cars.length} cars`, 8, CW - 8);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  UI PANEL UPDATES
+// ═══════════════════════════════════════════════════════════════════════════
+const SA   = {N:'v', E:'<', S:'^', W:'>'};
+const SDIR = {N:'South-bound GREEN', E:'West-bound GREEN',
+              S:'North-bound GREEN', W:'East-bound GREEN'};
+const SDSC = {N:'Approach: N  Phase 0/4',  E:'Approach: E  Phase 1/4',
+              S:'Approach: S  Phase 2/4',  W:'Approach: W  Phase 3/4'};
+
+function fmtTime(s) {
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60), sec = s % 60;
+  if (s < 3600) return `${m}m ${sec}s`;
+  return `${Math.floor(s / 3600)}h ${m % 60}m`;
+}
+
+function updateUI() {
+  document.getElementById('sd').textContent = String(stepIdx).padStart(4, '0');
+  const secs = stepIdx * 2;
+  document.getElementById('et').textContent  = fmtTime(secs);
+  document.getElementById('min').textContent = `${(secs / 60).toFixed(1)} min`;
+
+  const g = DIR_CYCLE[stepIdx % 4];
+  document.getElementById('sa').textContent  = SA[g];
+  document.getElementById('sd2').textContent = SDIR[g];
+  document.getElementById('sd3').textContent = SDSC[g];
+  for (let i = 0; i < 4; i++)
+    document.getElementById(`ph${i}`).className = 'phase-dot' + (i === stepIdx % 4 ? ' on' : '');
+
+  document.getElementById('m0').textContent = `${cars.length} / ${MAX_CARS}`;
+  document.getElementById('m1').textContent = tours;
+  document.getElementById('m3').textContent = spawned;
+  const hrs = secs / 3600;
+  document.getElementById('m2').textContent = hrs > 0 ? (tours / hrs).toFixed(1) : '0.0';
+
+  const checks = [viol.col, viol.red, viol.ill, viol.utn, viol.crs];
+  checks.forEach((v, i) => {
+    const el = document.getElementById(`c${i}`);
+    el.textContent = v;
+    el.className   = 'mval ' + (v === 0 ? 'ok' : 'bad');
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════════════════
+doReset();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+[project]
+name = "traffic-system-vgroup"
+version = "0.1.0"
+description = "Vehicle group (v-group) for ECEN723 Spring 2026 traffic system."
+readme = "README.md"
+requires-python = ">=3.10"
+
+[project.scripts]
+traffic-vgroup = "traffic_vehicles.__main__:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
