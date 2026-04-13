@@ -328,38 +328,6 @@ Start the web server:
 python -m traffic_infra.web_app
 ```
 
-Leave that terminal running.
-
-### On your local machine
-
-Open a new terminal and create an SSH tunnel:
-
-```bash
-ssh -L 8765:127.0.0.1:8765 dhanush_adithya@olympus-login
-```
-
-Then open in a browser:
-
-- `http://127.0.0.1:8765`
-
-If port `8765` is busy:
-
-Server:
-
-```bash
-python -m traffic_infra.web_app --port 8766
-```
-
-Local machine:
-
-```bash
-ssh -L 8766:127.0.0.1:8766 dhanush_adithya@olympus-login
-```
-
-Then open:
-
-- `http://127.0.0.1:8766`
-
 ## 12. Recommended Experiment Runs
 
 ### Safe baseline
