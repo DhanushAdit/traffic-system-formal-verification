@@ -178,48 +178,6 @@ With a fixed seed:
 python -m traffic_vehicles --hours 2 --cars 4 --spawn-interval 1 --unsafe-rate 0.05 --seed 723
 ```
 
-## Run the Web Visualizer
-
-Start the server:
-
-```bash
-python -m traffic_infra.web_app
-```
-
-Then open:
-
-- `http://127.0.0.1:8765`
-
-### View the Site From a Local Machine via SSH
-
-If the simulator is running on a remote server, create a local tunnel:
-
-```bash
-ssh -L 8765:127.0.0.1:8765 dhanush_adithya@olympus-login
-```
-
-Then open in your local browser:
-
-- `http://127.0.0.1:8765`
-
-If port `8765` is busy:
-
-Server:
-
-```bash
-python -m traffic_infra.web_app --port 8766
-```
-
-Local machine:
-
-```bash
-ssh -L 8766:127.0.0.1:8766 dhanush_adithya@olympus-login
-```
-
-Then open:
-
-- `http://127.0.0.1:8766`
-
 ## Recommended Reproduction Steps
 
 If you want to replicate the main results from scratch:
@@ -238,8 +196,6 @@ python -m traffic_vehicles --hours 2 --cars 4 --spawn-interval 1
 ```bash
 python -m traffic_vehicles --hours 2 --cars 4 --spawn-interval 1 --unsafe-rate 0.05
 ```
-
-6. Start the web visualizer and inspect the behavior interactively.
 
 ## Notes
 
