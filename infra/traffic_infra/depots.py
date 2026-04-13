@@ -1,11 +1,12 @@
 """
 Square / corner layout from the ECEN723 traffic diagram (course handout).
 
-Grid indices: (0,0) = top-left intersection, (2,2) = bottom-right; +x right, +y down.
+Grid indices follow the project geometry used everywhere else in the repo:
+(0,0) = bottom-left intersection, (2,2) = top-right; +x right, +y up.
 
-- **A**: start **square** immediately **west** of the top-left intersection (0,0).
-- **B, C, D**: labels on the **circles** at bottom-left (0,2), bottom-right (2,2),
-  and top-right (2,0) respectively.
+- **A**: start **square** immediately west of the top-left corner intersection (0,2).
+- **B, C, D**: labels on the bottom-left (0,0), bottom-right (2,0),
+  and top-right (2,2) corner intersections respectively.
 
 Vehicles depart from A, visit B, C, D in some order, return to A.
 """
@@ -20,10 +21,10 @@ from .state import CarState
 
 # Intersection each marker belongs to (matches standard course figure).
 DEPOT_ADJACENT_INTERSECTION: dict[str, Intersection] = {
-    "A": (0, 0),
-    "B": (0, 2),
-    "C": (2, 2),
-    "D": (2, 0),
+    "A": (0, 2),
+    "B": (0, 0),
+    "C": (2, 0),
+    "D": (2, 2),
 }
 
 
@@ -67,7 +68,7 @@ def depots_to_json() -> list[dict]:
 
 
 def first_road_edge_leaving_start() -> DirectedEdge:
-    """First interior segment from A's intersection toward B: (0,0)→(0,1)→…→(0,2)."""
+    """First interior segment from A's intersection toward B."""
     a = DEPOT_ADJACENT_INTERSECTION["A"]
     b = DEPOT_ADJACENT_INTERSECTION["B"]
     if a[0] == b[0]:

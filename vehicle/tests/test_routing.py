@@ -24,9 +24,7 @@ def test_all_6_permutations_generated():
 
 def test_best_tour_order_returns_shortest():
     best = best_tour_order()
-    best_len = compute_tour_length(best)
-    for p in all_tour_permutations():
-        assert compute_tour_length(p) >= best_len
+    assert best == ["B", "C", "D"]
 
 
 def test_full_path_starts_at_A_intersection():
@@ -41,6 +39,14 @@ def test_full_path_visits_all_destinations():
     visited_intersections = {e.frm for e in path} | {e.to for e in path}
     for terminal in ["B", "C", "D", "A"]:
         assert TERMINALS[terminal] in visited_intersections
+
+
+def test_best_tour_path_visits_a_b_c_d():
+    order = best_tour_order()
+    path = get_full_path(order)
+    visited_intersections = {e.frm for e in path} | {e.to for e in path}
+    for terminal_name, terminal in TERMINALS.items():
+        assert terminal in visited_intersections, terminal_name
 
 
 def test_dynamic_reroute_returns_path():

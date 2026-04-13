@@ -37,6 +37,15 @@ def test_throughput_calculation():
 def test_throughput_zero_steps():
     fleet = Fleet()
     assert fleet.throughput_per_hour(0) == 0.0
+    assert fleet.throughput_per_minute(0) == 0.0
+
+
+def test_throughput_per_minute_calculation():
+    fleet = Fleet()
+    fleet.completed_tours = 10
+    # 30 steps * 2s = 60s = 1 minute.
+    result = fleet.throughput_per_minute(30)
+    assert abs(result - 10.0) < 1e-6
 
 
 def test_multi_car_spawn():

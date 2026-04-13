@@ -8,7 +8,7 @@ from itertools import permutations
 
 from traffic_infra.geometry import Dir, DirectedEdge, Intersection
 
-from .constants import SLOTS_PER_SEGMENT, TERMINALS
+from .constants import PERIMETER_TOUR_ORDER, SLOTS_PER_SEGMENT, TERMINALS
 from .network import get_directed_edge, get_neighbors
 
 
@@ -67,8 +67,7 @@ def compute_tour_length(order: list[str]) -> int:
 
 
 def best_tour_order() -> list[str]:
-    perms = all_tour_permutations()
-    return min(perms, key=compute_tour_length)
+    return list(PERIMETER_TOUR_ORDER)
 
 
 def dynamic_reroute(

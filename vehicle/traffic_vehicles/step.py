@@ -13,6 +13,11 @@ from .routing import best_tour_order, get_full_path
 _fleet_registry: dict[str, Vehicle] = {}
 
 
+def reset_vehicle_step_state() -> None:
+    """Clear the persistent registry used by vehicle_step()."""
+    _fleet_registry.clear()
+
+
 def _priority(cs: CarState) -> int:
     """Higher priority = closer to intersection (higher slot number)."""
     return cs.slot

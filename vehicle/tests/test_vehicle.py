@@ -6,6 +6,7 @@ from traffic_infra.state import CarState, LightColor, TrafficSignals
 from traffic_infra.geometry import grid_intersections
 
 from traffic_vehicles.vehicle import Vehicle
+from traffic_vehicles.step import reset_vehicle_step_state, vehicle_step
 
 
 def _all_green(green_dir: Dir = Dir.N) -> TrafficSignals:
@@ -75,6 +76,22 @@ def test_car_stops_for_car_ahead():
     signals = _all_green()
     new_cs = v.decide_move(signals, {"car_2": blocker}, {}, set())
     assert new_cs.slot == 5  # stayed
+
+
+def test_following_car_waits_behind_lead_car_at_red_light():
+    reset_vehicle_step_state()
+    edge = DirectedEdge(frm=(0, 0), to=(1, 0))
+    prev = {
+        "lead": CarState(car_id="lead", edge=edge, slot=29, driving_dir=Dir.E),
+        "follow": CarState(car_id="follow", edge=edge, slot=28, driving_dir=Dir.E),
+    }
+
+    nxt = vehicle_step(prev, _all_red(), {})
+
+    assert nxt["lead"].slot == 29
+    assert nxt["follow"].slot == 28
+    assert nxt["lead"].edge == edge
+    assert nxt["follow"].edge == edge
 
 
 def test_car_no_uturn_at_intersection():

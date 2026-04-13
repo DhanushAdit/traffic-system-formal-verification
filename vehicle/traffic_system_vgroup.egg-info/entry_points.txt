@@ -1,0 +1,2 @@
+[console_scripts]
+traffic-vgroup = traffic_vehicles.__main__:main

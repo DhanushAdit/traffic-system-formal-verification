@@ -11,7 +11,7 @@ from traffic_infra.depots import (
 
 def test_first_segment_from_a_toward_b():
     edge = first_road_edge_leaving_start()
-    assert edge.frm == (0, 0)
+    assert edge.frm == (0, 2)
     assert edge.to == (0, 1)
 
 
@@ -27,10 +27,10 @@ def test_depots_json_has_start_and_destinations():
     assert roles["A"] == "start"
     assert roles["B"] == roles["C"] == roles["D"] == "destination"
     a = next(x for x in js if x["label"] == "A")
-    assert a["adj"] == [0, 0]
+    assert a["adj"] == [0, 2]
     assert a["kind"] == "start_square"
     assert a["outward"] == "W"
     assert "box" in a
     b = next(x for x in js if x["label"] == "B")
     assert b["kind"] == "corner_label"
-    assert b["adj"] == [0, 2]
+    assert b["adj"] == [0, 0]

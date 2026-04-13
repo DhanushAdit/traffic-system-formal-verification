@@ -1,4 +1,3 @@
-README.md
 pyproject.toml
 tests/test_checks.py
 tests/test_congestion.py
@@ -13,6 +12,7 @@ traffic_infra/constants.py
 traffic_infra/depots.py
 traffic_infra/geometry.py
 traffic_infra/igroupsim.py
+traffic_infra/integrated_simulation.py
 traffic_infra/light_control.py
 traffic_infra/protocol.py
 traffic_infra/simulation.py

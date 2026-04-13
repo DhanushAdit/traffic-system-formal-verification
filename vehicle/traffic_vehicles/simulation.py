@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import random
 
 from traffic_infra.congestion import stopped_cars_per_intersection
-from traffic_infra.geometry import grid_intersections
+from traffic_infra.constants import CONTROL_STEP_SECONDS
+from traffic_infra.geometry import Dir, DirectedEdge, grid_intersections
 from traffic_infra.light_control import LightController
 from traffic_infra.state import CarState
 
 from .fleet import Fleet
+from .network import get_valid_next_edges
 from .step import vehicle_step
 from .verifier import VGroupVerifier
 
@@ -17,7 +20,9 @@ from .verifier import VGroupVerifier
 @dataclass
 class SimulationResult:
     total_steps: int
+    simulated_hours: float
     completed_tours: int
+    throughput_per_minute: float
     throughput_per_hour: float
     collision_count: int
     red_light_violations: int
@@ -27,13 +32,25 @@ class SimulationResult:
 
 
 class VGroupSimulation:
-    def __init__(self, spawn_interval: int = 5) -> None:
+    def __init__(
+        self,
+        spawn_interval: int = 1,
+        *,
+        unsafe_rate: float = 0.0,
+        random_seed: int = 723,
+    ) -> None:
         self.fleet = Fleet()
         self.verifier = VGroupVerifier()
         self.step_count: int = 0
         self.spawn_interval: int = spawn_interval
         self._controller = LightController()
         self._intersections = grid_intersections()
+        self.unsafe_rate = unsafe_rate
+        self._rng = random.Random(random_seed)
+
+    @staticmethod
+    def steps_for_hours(hours: float) -> int:
+        return int((hours * 3600) / CONTROL_STEP_SECONDS)
 
     def run(
         self,
@@ -44,10 +61,10 @@ class VGroupSimulation:
         # Spawn initial cars — stagger them by advancing each off slot 0 first
         for i in range(num_initial_cars):
             new_id = self.fleet.spawn_car()
-            if new_id is not None and i > 0:
-                # Move this car forward so it doesn't block slot 0 for the next spawn
+            if new_id is not None and i < num_initial_cars - 1:
+                # Pack initial cars densely so we can study high-throughput flow.
                 v = self.fleet.vehicles[new_id]
-                v.current_slot = i * 3  # space them out
+                v.current_slot = min(i + 1, 29)
 
         prev: dict[str, CarState] = self.fleet.get_all_car_states()
 
@@ -58,6 +75,7 @@ class VGroupSimulation:
             # 2. Compute next states for active cars
             congestion = self.fleet.congestion_map
             nxt = vehicle_step(prev, signals, congestion)
+            nxt = self._inject_random_violations(prev, nxt)
 
             # 3. Verify
             report = self.verifier.check_step(prev, nxt, signals)
@@ -88,9 +106,12 @@ class VGroupSimulation:
                 )
 
         throughput = self.fleet.throughput_per_hour(self.step_count)
+        throughput_per_minute = self.fleet.throughput_per_minute(self.step_count)
         return SimulationResult(
             total_steps=self.step_count,
+            simulated_hours=(self.step_count * CONTROL_STEP_SECONDS) / 3600,
             completed_tours=self.fleet.completed_tours,
+            throughput_per_minute=throughput_per_minute,
             throughput_per_hour=throughput,
             collision_count=self.verifier.collision_count,
             red_light_violations=self.verifier.red_light_violations,
@@ -99,11 +120,67 @@ class VGroupSimulation:
             intersection_crossing_violations=self.verifier.intersection_crossing_violations,
         )
 
+    def _inject_random_violations(
+        self,
+        prev: dict[str, CarState],
+        nxt: dict[str, CarState],
+    ) -> dict[str, CarState]:
+        """Optional chaos mode to demonstrate violations and robustness metrics."""
+        if self.unsafe_rate <= 0.0 or not nxt:
+            return nxt
+
+        mutated = dict(nxt)
+        for car_id, next_state in list(mutated.items()):
+            if self._rng.random() >= self.unsafe_rate:
+                continue
+            prev_state = prev.get(car_id)
+            if prev_state is None:
+                continue
+            scenario = self._rng.choice(("red_light", "wrong_way", "collision"))
+            if scenario == "red_light":
+                forced = self._force_red_light_crossing(prev_state)
+                if forced is not None:
+                    mutated[car_id] = forced
+            elif scenario == "wrong_way":
+                mutated[car_id] = CarState(
+                    car_id=next_state.car_id,
+                    edge=next_state.edge,
+                    slot=next_state.slot,
+                    driving_dir=self._rng.choice([d for d in Dir if d != next_state.driving_dir]),
+                )
+            elif scenario == "collision":
+                target_id = self._rng.choice(list(mutated.keys()))
+                if target_id != car_id:
+                    target = mutated[target_id]
+                    mutated[car_id] = CarState(
+                        car_id=next_state.car_id,
+                        edge=target.edge,
+                        slot=target.slot,
+                        driving_dir=target.driving_dir,
+                    )
+        return mutated
+
+    def _force_red_light_crossing(self, prev_state: CarState) -> CarState | None:
+        if prev_state.slot != 29:
+            return None
+        options = get_valid_next_edges(prev_state.edge)
+        if not options:
+            return None
+        forced_edge = self._rng.choice(options)
+        return CarState(
+            car_id=prev_state.car_id,
+            edge=forced_edge,
+            slot=0,
+            driving_dir=forced_edge.dir(),
+        )
+
     def print_report(self) -> None:
         s = self.verifier.summary()
         print(f"\n=== V-Group Simulation Report ===")
         print(f"  Steps run          : {self.step_count}")
+        print(f"  Simulated hours    : {(self.step_count * CONTROL_STEP_SECONDS) / 3600:.2f}")
         print(f"  Completed tours    : {self.fleet.completed_tours}")
+        print(f"  Throughput/min     : {self.fleet.throughput_per_minute(self.step_count):.2f}")
         print(f"  Throughput/hr      : {self.fleet.throughput_per_hour(self.step_count):.2f}")
         for k, v in s.items():
             print(f"  {k:<35}: {v}")

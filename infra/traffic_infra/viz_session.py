@@ -1,4 +1,4 @@
-"""Simulation state for the web visualizer — same stepping logic as `traffic_infra` CLI."""
+"""Simulation state for the web visualizer."""
 
 from __future__ import annotations
 
@@ -14,6 +14,11 @@ from .simulation import InfraSimulation
 from .state import CarState, TrafficSignals
 from .stub_vehicle import stub_vehicle_step
 
+try:
+    from .integrated_simulation import IntegratedSimulation
+except ImportError:
+    IntegratedSimulation = None
+
 
 def _initial_cars() -> dict[str, CarState]:
     initial = {"car1": initial_car_from_depot_a("car1")}
@@ -22,16 +27,26 @@ def _initial_cars() -> dict[str, CarState]:
 
 
 class VizSimulationSession:
-    """One runnable session: i-group signals + stub vehicles (swap `stub_vehicle_step` for your controller)."""
+    """One runnable session for either the integrated or stub simulator."""
 
     def __init__(self) -> None:
-        self.initial = _initial_cars()
-        self.sim = InfraSimulation()
-        self.prev: dict[str, CarState] = dict(self.initial)
+        self._integrated: IntegratedSimulation | None = self._build_integrated()
+        if self._integrated is None:
+            self.initial = _initial_cars()
+            self.sim = InfraSimulation()
+            self.prev: dict[str, CarState] = dict(self.initial)
+        else:
+            self.initial = {}
+            self.sim = self._integrated.sim
+            self.prev = self._integrated.current_cars()
 
     def reset(self) -> dict:
-        self.sim = InfraSimulation()
-        self.prev = dict(self.initial)
+        if self._integrated is not None:
+            self.prev = self._integrated.reset()
+            self.sim = self._integrated.sim
+        else:
+            self.sim = InfraSimulation()
+            self.prev = dict(self.initial)
         return self._snapshot(
             report=None,
             signals=None,
@@ -40,12 +55,20 @@ class VizSimulationSession:
         )
 
     def step(self) -> dict:
-        signals = self.sim.igroup.decide(self.prev)
-        nxt = stub_vehicle_step(self.prev, signals)
-        report = self.sim.igroup.report(nxt)
-        self.sim.cumulative.add(report)
-        cong = stopped_cars_per_intersection(self.prev, nxt)
-        self.prev = nxt
+        if self._integrated is not None:
+            result = self._integrated.step()
+            self.sim = self._integrated.sim
+            self.prev = result.current_cars
+            report = result.report
+            signals = result.signals
+            cong = result.congestion
+        else:
+            signals = self.sim.igroup.decide(self.prev)
+            nxt = stub_vehicle_step(self.prev, signals)
+            report = self.sim.igroup.report(nxt)
+            self.sim.cumulative.add(report)
+            cong = stopped_cars_per_intersection(self.prev, nxt)
+            self.prev = nxt
         return self._snapshot(
             report=report,
             signals=signals,
@@ -71,6 +94,7 @@ class VizSimulationSession:
             "cars": {cid: car_state_to_json(c) for cid, c in self.prev.items()},
             "signals": traffic_signals_to_json(signals) if signals else None,
             "signals_all_intersections": self._signals_full_grid(signals),
+            "signal_timing": self._signal_timing(),
             "congestion": {f"{x},{y}": n for (x, y), n in congestion.items()},
             "cumulative": {
                 "collision_count": c.collision_count,
@@ -93,3 +117,19 @@ class VizSimulationSession:
                 g = signals.green_approach_by_intersection.get(inter)
                 out[key] = None if g is None else g.value
         return out
+
+    def _signal_timing(self) -> dict[str, int]:
+        controller = self.sim.igroup.controller
+        timing = {
+            "green_steps": controller.green_steps,
+            "green_seconds": controller.green_seconds,
+            "all_red_steps": controller.all_red_steps,
+            "all_red_seconds": controller.all_red_seconds,
+        }
+        timing.update(controller.phase_window(self.sim.igroup.step_index))
+        return timing
+
+    def _build_integrated(self) -> IntegratedSimulation | None:
+        if IntegratedSimulation is None:
+            return None
+        return IntegratedSimulation()

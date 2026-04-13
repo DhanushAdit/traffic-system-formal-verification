@@ -9,6 +9,7 @@
   const cumulativeEl = document.getElementById("cumulative");
   const reportEl = document.getElementById("report");
   const congestionEl = document.getElementById("congestion");
+  const signalTimingEl = document.getElementById("signal-timing");
   const btnStep = document.getElementById("btn-step");
   const btnReset = document.getElementById("btn-reset");
   const btnAuto = document.getElementById("btn-auto");
@@ -35,7 +36,7 @@
   let autoTimer = null;
 
   function gridToPx(ix, iy) {
-    return { x: padL + ix * cellX, y: padT + iy * cellY };
+    return { x: padL + ix * cellX, y: padT + (GRID_SIZE - 1 - iy) * cellY };
   }
 
   /** Unit tangent and right-hand perpendicular (screen px) from a → b. */
@@ -63,15 +64,13 @@
   /**
    * Approach directions that have a road into (ix, iy), matching traffic_infra Dir /
    * green_approach (one bead per incident edge).
-   * - Neighbor east  → approach E; west → W;
-   * - Neighbor with smaller grid-y → approach S; larger grid-y → N (same as Python travel_dir / opposites).
    */
   function approachDirsAtIntersection(ix, iy) {
     const dirs = [];
     if (ix + 1 < GRID_SIZE) dirs.push("E");
     if (ix - 1 >= 0) dirs.push("W");
-    if (iy - 1 >= 0) dirs.push("S");
     if (iy + 1 < GRID_SIZE) dirs.push("N");
+    if (iy - 1 >= 0) dirs.push("S");
     return dirs;
   }
 
@@ -159,7 +158,7 @@
     const cx = base.x + d[0] * stand;
     const cy = base.y + d[1] * stand;
     const east = { x: cx + hw, y: cy };
-    const joint = gridToPx(0, 0);
+    const joint = gridToPx(a.adj[0], a.adj[1]);
     const inset = Math.min(cellX, cellY) * 0.06;
     drawTwoLaneRoad({ x: east.x + inset, y: east.y }, { x: joint.x - inset, y: joint.y });
   }
@@ -171,14 +170,18 @@
     depots.forEach((d) => {
       if (d.kind === "corner_label" && d.adj) {
         const p = gridToPx(d.adj[0], d.adj[1]);
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+        ctx.strokeStyle = "#cbd5e1";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y - 24, 13, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
         ctx.font = "bold 14px sans-serif";
         ctx.fillStyle = "#0f172a";
-        ctx.strokeStyle = "#e2e8f0";
-        ctx.lineWidth = 3;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.strokeText(d.label, p.x, p.y - 1);
-        ctx.fillText(d.label, p.x, p.y - 1);
+        ctx.fillText(d.label, p.x, p.y - 24);
         return;
       }
       if (d.kind !== "start_square" || !d.adj || !d.outward) return;
@@ -203,6 +206,10 @@
       ctx.fillStyle = "#ccfbf1";
       ctx.font = "9px sans-serif";
       ctx.fillText("START", cx, cy + 10);
+      ctx.fillStyle = "#0f172a";
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("A", cx, cy - 8);
     });
   }
 
@@ -221,8 +228,8 @@
           const qx = p.x + dx;
           const qy = p.y + dy;
           const isG = green === dir;
-          ctx.fillStyle = isG ? "#16a34a" : "#cbd5e1";
-          ctx.strokeStyle = isG ? "#14532d" : "#94a3b8";
+          ctx.fillStyle = isG ? "#16a34a" : "#dc2626";
+          ctx.strokeStyle = isG ? "#14532d" : "#7f1d1d";
           ctx.lineWidth = 1;
           ctx.beginPath();
           ctx.arc(qx, qy, 4, 0, Math.PI * 2);
@@ -250,10 +257,10 @@
 
   function carPx(car, slots) {
     const n = Math.max(2, slots | 0);
-    const denom = n - 1;
     const f = car.edge.frm;
     const t = car.edge.to;
-    const u = car.slot / denom;
+    // Render each slot at its midpoint so slot 29 is still visibly before the node.
+    const u = (car.slot + 0.5) / n;
     const gx = f[0] + (t[0] - f[0]) * u;
     const gy = f[1] + (t[1] - f[1]) * u;
     const Pa = gridToPx(f[0], f[1]);
@@ -302,7 +309,7 @@
     ctx.font = "11px sans-serif";
     ctx.textAlign = "left";
     ctx.fillText(
-      "Roads: two lanes; cars in the right-hand lane. Signals only on real approaches (e.g. 2 at corners). Green = go for that approach.",
+      "This canvas renders Python snapshots from /api/step. Cars move one slot per step and may cross only on the single green approach at an intersection.",
       12,
       H - 10,
     );
@@ -326,6 +333,7 @@
     const cg = state.congestion || {};
     congestionEl.textContent =
       Object.keys(cg).length === 0 ? "—" : JSON.stringify(cg, null, 2);
+    signalTimingEl.textContent = JSON.stringify(state.signal_timing || {}, null, 2);
   }
 
   function applyState(data) {
@@ -348,7 +356,7 @@
   }
 
   function startAuto() {
-    const ms = Math.max(50, parseInt(intervalInput.value, 10) || 300);
+    const ms = Math.max(200, parseInt(intervalInput.value, 10) || 1200);
     if (autoTimer) clearInterval(autoTimer);
     btnStop.disabled = false;
     btnAuto.disabled = true;
@@ -367,10 +375,11 @@
     return post("/api/reset")
       .then((data) => {
         applyState(data);
-        setStatus(true, "Running · " + location.origin);
+        setStatus(true, "Paused · " + location.origin);
         btnStep.disabled = false;
         btnReset.disabled = false;
-        startAuto();
+        btnAuto.disabled = false;
+        btnStop.disabled = true;
       })
       .catch((e) => {
         setStatus(false, "Server: " + e.message + " — run python -m traffic_infra.web_app");
@@ -392,8 +401,9 @@
     post("/api/reset")
       .then((data) => {
         applyState(data);
-        setStatus(true, "Running · " + location.origin);
-        startAuto();
+        setStatus(true, "Paused · " + location.origin);
+        btnAuto.disabled = false;
+        btnStop.disabled = true;
       })
       .catch((e) => setStatus(false, e.message));
   });

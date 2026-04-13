@@ -23,7 +23,7 @@
       <button type="button" id="btn-stop" disabled>Stop</button>
       <label class="gap"
         >Interval (ms)
-        <input type="number" id="interval" value="300" min="50" step="50" width="4"
+        <input type="number" id="interval" value="1200" min="200" step="100" width="4"
       /></label>
       <span class="step-label">Step <strong id="step-num">0</strong></span>
     </div>
@@ -39,9 +39,17 @@
         <pre id="report" class="json-box">—</pre>
         <h2>Congestion</h2>
         <pre id="congestion" class="json-box small">—</pre>
+        <h2>Signal Timing</h2>
+        <pre id="signal-timing" class="json-box small">—</pre>
         <p class="hint">
           API:
           <code>POST /api/step · POST /api/reset</code>
+        </p>
+        <p class="hint">
+          Light legend:
+          <code>green = permitted approach</code>,
+          <code>red = stop</code>.
+          Each intersection should have at most one green approach at a time.
         </p>
       </aside>
     </div>

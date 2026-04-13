@@ -1,0 +1,434 @@
+# Traffic System Formal Verification: Implementation Guide
+
+This document summarizes the work completed in this repository, the current system behavior, and the exact commands to run tests, simulations, and the web visualizer.
+
+## 1. Project Summary
+
+This project models a simplified traffic system on a 3x3 grid. Cars move on directed road segments between intersections, obey traffic signals, and attempt to complete the full loop:
+
+`A -> B -> C -> D -> A`
+
+The system tracks:
+
+- safety violations
+- completed loops
+- throughput per minute
+- throughput per hour
+
+There are two major parts:
+
+- `infra/traffic_infra`: infrastructure, traffic lights, checks, web visualization
+- `vehicle/traffic_vehicles`: car motion, routing, fleet management, simulation
+
+## 2. Main Work Completed
+
+The following major changes were implemented.
+
+### 2.1 Integrated the infrastructure and vehicle systems
+
+Added a shared end-to-end simulation runtime so the infrastructure side now drives real vehicle motion rather than only a stub vehicle model.
+
+Key file:
+
+- `infra/traffic_infra/integrated_simulation.py`
+
+This runtime now performs:
+
+1. signal generation
+2. vehicle motion update
+3. safety verification
+4. congestion update
+5. completion counting
+6. spawning of new cars
+
+### 2.2 Replaced the stub visualizer behavior with real backend state
+
+The web page now renders actual Python snapshots returned by the backend API. It is not a fake animation.
+
+Key files:
+
+- `infra/traffic_infra/viz_session.py`
+- `infra/traffic_infra/static/viz.js`
+- `infra/traffic_infra/static/index.html`
+
+### 2.3 Implemented queueing and slot exclusivity
+
+Cars cannot overlap in the same edge slot during normal safe operation.
+
+Behavior:
+
+- if a car is waiting at a red signal, the next car waits behind it
+- cars are processed in descending slot order
+- a following car only advances if the next slot is free
+
+Key files:
+
+- `vehicle/traffic_vehicles/vehicle.py`
+- `vehicle/traffic_vehicles/step.py`
+
+### 2.4 Fixed route completion logic
+
+A loop completion is counted only when a car:
+
+1. visits all required corners
+2. returns to `A`
+
+Once a car completes the loop, it is removed from the active fleet and does not restart.
+
+Key file:
+
+- `vehicle/traffic_vehicles/fleet.py`
+
+### 2.5 Added throughput metrics
+
+The system now reports:
+
+- `completed_tours`
+- `throughput_per_minute`
+- `throughput_per_hour`
+
+These are derived from cars that fully complete the loop `A -> B -> C -> D -> A`.
+
+### 2.6 Added fast-forward simulation
+
+The standalone vehicle simulation can simulate a long duration, including 2 hours of traffic, without taking 2 hours of real execution time.
+
+Key file:
+
+- `vehicle/traffic_vehicles/simulation.py`
+
+### 2.7 Added optional unsafe/randomized mode
+
+An optional unsafe mode was added to intentionally perturb some cars so the system can demonstrate:
+
+- collisions
+- red-light violations
+- illegal direction violations
+
+This is useful for showing that the verification logic detects unsafe behavior.
+
+### 2.8 Aligned the system for higher throughput
+
+To improve throughput:
+
+- all cars now follow the same perimeter loop
+- signal phases were aligned with that perimeter flow
+- spawn interval defaults were made more aggressive
+
+## 3. Current Driving Logic
+
+Each car follows a precomputed path around the perimeter:
+
+`A -> B -> C -> D -> A`
+
+At each simulation step:
+
+1. If the car is not at the end of an edge, it attempts to move forward by one slot.
+2. If the next slot is occupied, it stays in place.
+3. If the car is at the intersection boundary, it can cross only if:
+   - the next planned edge is valid
+   - the signal for its approach is green
+   - no other car has already reserved that intersection in the same step
+   - the first slot of the next edge is free
+
+This means cars stop before the intersection and queue behind one another.
+
+## 4. Traffic Signal Logic
+
+The controller rotates a single green approach across all intersections.
+
+The current perimeter-oriented phase order is:
+
+1. `N`
+2. `W`
+3. `S`
+4. `E`
+
+This ordering is chosen to support the perimeter loop flow.
+
+Important properties:
+
+- at most one green approach per intersection
+- all other approaches are effectively red
+- green is held for a longer interval instead of changing every step
+
+Key file:
+
+- `infra/traffic_infra/light_control.py`
+
+## 5. Safety Metrics
+
+The system tracks these violation counters:
+
+- `collision_count`
+- `red_light_violations`
+- `illegal_direction_count`
+- `u_turn_count`
+- `intersection_crossing_violations`
+
+### Important note about collision counting
+
+`collision_count` is counted as pairwise occupancy conflicts in the same edge-slot, not as “number of crashed cars”.
+
+If a slot contains `k` cars in one step, the count added is:
+
+`k * (k - 1) / 2`
+
+So:
+
+- 2 cars in one slot = 1 collision
+- 3 cars in one slot = 3 collisions
+- 4 cars in one slot = 6 collisions
+
+Also, the metric is cumulative across steps.
+
+## 6. Key Files
+
+### Infrastructure
+
+- `infra/traffic_infra/integrated_simulation.py`
+- `infra/traffic_infra/light_control.py`
+- `infra/traffic_infra/checks.py`
+- `infra/traffic_infra/viz_session.py`
+- `infra/traffic_infra/web_app.py`
+- `infra/traffic_infra/__main__.py`
+
+### Vehicles
+
+- `vehicle/traffic_vehicles/vehicle.py`
+- `vehicle/traffic_vehicles/step.py`
+- `vehicle/traffic_vehicles/fleet.py`
+- `vehicle/traffic_vehicles/routing.py`
+- `vehicle/traffic_vehicles/simulation.py`
+- `vehicle/traffic_vehicles/__main__.py`
+
+## 7. Setup
+
+These commands are intended for the server environment where Python 3.12 is available.
+
+From the repository root:
+
+```bash
+cd /home/grads/d/dhanush_adithya/spr26/formal/traffic-system-formal-verification
+source .venv/bin/activate
+```
+
+If dependencies are missing:
+
+```bash
+python -m pip install --upgrade pip setuptools wheel
+pip install -e ./infra
+pip install -e ./vehicle
+pip install pytest
+```
+
+## 8. How To Run Tests
+
+Run all tests:
+
+```bash
+python -m pytest infra/tests vehicle/tests -v
+```
+
+Quiet mode:
+
+```bash
+python -m pytest infra/tests vehicle/tests -q
+```
+
+Run only vehicle tests:
+
+```bash
+python -m pytest vehicle/tests -v
+```
+
+Run only infrastructure tests:
+
+```bash
+python -m pytest infra/tests -v
+```
+
+Save test output:
+
+```bash
+python -m pytest infra/tests vehicle/tests -v | tee test_output.txt
+```
+
+## 9. How To Run Simulations
+
+### 9.1 Infrastructure integrated simulation
+
+This runs the integrated infrastructure controller and prints summary metrics.
+
+```bash
+python -m traffic_infra --steps 600 --cars 4 --spawn-interval 1
+```
+
+Save output:
+
+```bash
+python -m traffic_infra --steps 600 --cars 4 --spawn-interval 1 | tee infra_run.txt
+```
+
+### 9.2 Vehicle standalone simulation
+
+This runs the standalone vehicle simulation.
+
+```bash
+python -m traffic_vehicles --steps 1800 --cars 4 --spawn-interval 1
+```
+
+### 9.3 Simulate 2 hours of traffic quickly
+
+The simulation can fast-forward 2 hours of simulated traffic.
+
+```bash
+python -m traffic_vehicles --hours 2 --cars 4 --spawn-interval 1
+```
+
+This does not run for 2 hours in real time. It simulates:
+
+- 2 hours of system time
+- 3600 discrete steps
+- 2 seconds per step
+
+### 9.4 Save 2-hour simulation output
+
+```bash
+python -m traffic_vehicles --hours 2 --cars 4 --spawn-interval 1 | tee sim_output.txt
+```
+
+## 10. Unsafe / Randomized Violation Demonstration
+
+To intentionally generate unsafe behavior and observe nonzero violation metrics:
+
+```bash
+python -m traffic_vehicles --hours 2 --cars 4 --spawn-interval 1 --unsafe-rate 0.05
+```
+
+With a fixed seed:
+
+```bash
+python -m traffic_vehicles --hours 2 --cars 4 --spawn-interval 1 --unsafe-rate 0.05 --seed 723
+```
+
+Save output:
+
+```bash
+python -m traffic_vehicles --hours 2 --cars 4 --spawn-interval 1 --unsafe-rate 0.05 | tee unsafe_output.txt
+```
+
+## 11. How To View The Website Locally
+
+### On the server machine
+
+Start the web server:
+
+```bash
+python -m traffic_infra.web_app
+```
+
+Leave that terminal running.
+
+### On your local machine
+
+Open a new terminal and create an SSH tunnel:
+
+```bash
+ssh -L 8765:127.0.0.1:8765 dhanush_adithya@olympus-login
+```
+
+Then open in a browser:
+
+- `http://127.0.0.1:8765`
+
+If port `8765` is busy:
+
+Server:
+
+```bash
+python -m traffic_infra.web_app --port 8766
+```
+
+Local machine:
+
+```bash
+ssh -L 8766:127.0.0.1:8766 dhanush_adithya@olympus-login
+```
+
+Then open:
+
+- `http://127.0.0.1:8766`
+
+## 12. Recommended Experiment Runs
+
+### Safe baseline
+
+```bash
+python -m traffic_vehicles --hours 2 --cars 4 --spawn-interval 1
+```
+
+Collect:
+
+- `completed_tours`
+- `completed_loops`
+- `throughput_per_minute`
+- `throughput_per_hour`
+- all violation metrics
+
+### Unsafe comparison run
+
+```bash
+python -m traffic_vehicles --hours 2 --cars 4 --spawn-interval 1 --unsafe-rate 0.05
+```
+
+Compare:
+
+- safe run vs unsafe run
+- loop completion count
+- throughput
+- violation counts
+
+## 13. Suggested Report Metrics
+
+For documentation or presentation, report:
+
+- simulation duration
+- number of initial cars
+- spawn interval
+- completed loops
+- throughput per minute
+- throughput per hour
+- collisions
+- red-light violations
+- illegal direction violations
+- u-turn violations
+- intersection crossing violations
+
+## 14. Current Limitations
+
+Some remaining limitations or caveats:
+
+- the unsafe/randomized mode is meant for demonstrating failures, not for realistic traffic behavior
+- the visualizer is useful for qualitative inspection, but the CLI output should be used for final numeric reporting
+- collision counts are pairwise cumulative conflicts, not unique physical crash counts
+
+## 15. Final Notes
+
+The current repository supports:
+
+- safe traffic simulation
+- unsafe violation demonstrations
+- loop completion counting
+- throughput measurement
+- 2-hour fast-forward experiments
+- browser visualization with backend-driven state
+
+For final evaluation, the most useful commands are:
+
+```bash
+python -m pytest infra/tests vehicle/tests -v
+python -m traffic_vehicles --hours 2 --cars 4 --spawn-interval 1
+python -m traffic_vehicles --hours 2 --cars 4 --spawn-interval 1 --unsafe-rate 0.05
+python -m traffic_infra.web_app
+```

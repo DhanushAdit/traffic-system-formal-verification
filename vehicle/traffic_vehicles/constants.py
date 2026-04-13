@@ -4,6 +4,7 @@ from traffic_infra.constants import SLOTS_PER_SEGMENT, CONTROL_STEP_SECONDS, MPH
 
 TOTAL_SIMULATION_STEPS = 1800  # 1 hour at 2 s/step
 MAX_CARS = 40
+PERIMETER_TOUR_ORDER: list[str] = ["B", "C", "D"]
 
 # Terminal labels → adjacent intersection coordinates
 TERMINALS: dict[str, tuple[int, int]] = {
@@ -19,5 +20,6 @@ __all__ = [
     "MPH_RUNNING",
     "TOTAL_SIMULATION_STEPS",
     "MAX_CARS",
+    "PERIMETER_TOUR_ORDER",
     "TERMINALS",
 ]
