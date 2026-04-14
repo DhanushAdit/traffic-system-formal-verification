@@ -1,0 +1,38 @@
+warning: never claim + accept labels requires -a flag to fully verify
+pan: ltl formula no_collision
+pan:1: assertion violated  !( !((in_intersection<=1))) (at depth 28)
+pan: wrote example_unsafe.pml.trail
+
+(Spin Version 6.5.2 -- 6 December 2019)
+Warning: Search not completed
+	+ Partial Order Reduction
+
+Full statespace search for:
+	never claim         	+ (no_collision)
+	assertion violations	+ (if within scope of claim)
+	cycle checks       	- (disabled by -DSAFETY)
+	invalid end states	- (disabled by never claim)
+
+State-vector 44 byte, depth reached 28, errors: 1
+       15 states, stored
+        3 states, matched
+       18 transitions (= stored+matched)
+        0 atomic steps
+hash conflicts:         0 (resolved)
+
+Stats on memory usage (in Megabytes):
+    0.001	equivalent memory usage for states (stored*(State-vector + overhead))
+    0.288	actual memory usage for states
+  128.000	memory used for hash table (-w24)
+    0.534	memory used for DFS stack (-m10000)
+  128.730	total actual memory usage
+
+
+
+pan: elapsed time 0 seconds
+ltl no_collision: [] ((in_intersection<=1))
+ltl no_red_light: [] (! (red_violation))
+  the model contains 2 never claims: no_red_light, no_collision
+  only one claim is used in a verification run
+  choose which one with ./pan -a -N name (defaults to -N no_collision)
+  or use e.g.: spin -search -ltl no_collision example_unsafe.pml
