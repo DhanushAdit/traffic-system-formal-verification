@@ -58,13 +58,11 @@ class VGroupSimulation:
         num_initial_cars: int = 4,
         verbose: bool = False,
     ) -> SimulationResult:
-        # Spawn initial cars — stagger them by advancing each off slot 0 first
+        # Spawn as many cars from A as the outbound lanes can legally accept.
         for i in range(num_initial_cars):
             new_id = self.fleet.spawn_car()
-            if new_id is not None and i < num_initial_cars - 1:
-                # Pack initial cars densely so we can study high-throughput flow.
-                v = self.fleet.vehicles[new_id]
-                v.current_slot = min(i + 1, 29)
+            if new_id is None:
+                break
 
         prev: dict[str, CarState] = self.fleet.get_all_car_states()
 

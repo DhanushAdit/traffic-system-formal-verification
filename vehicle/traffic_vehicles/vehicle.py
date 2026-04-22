@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from traffic_infra.geometry import Dir, DirectedEdge, Intersection
 from traffic_infra.state import CarState, LightColor, TrafficSignals
@@ -101,7 +101,7 @@ class Vehicle:
         if not at_end_of_edge:
             # --- On-edge movement ---
             next_slot = self.current_slot + 1
-            if self._car_ahead(next_slot, self.current_edge, all_car_states):
+            if self._slot_occupied(next_slot, self.current_edge, all_car_states):
                 return self._stay()
             return CarState(
                 car_id=self.car_id,
@@ -136,8 +136,8 @@ class Vehicle:
             if intersection in intersection_crossing_reserved:
                 return self._stay()
 
-            # Check slot 0 of next edge is free
-            if self._car_ahead(0, next_edge, all_car_states):
+            # Slot-based entry: a car may enter the next edge iff slot 0 is free.
+            if self._slot_occupied(0, next_edge, all_car_states):
                 return self._stay()
 
             # Cross the intersection
@@ -180,7 +180,7 @@ class Vehicle:
         if dest_name in TERMINALS and taken_edge.to == TERMINALS[dest_name]:
             self.destination_index = min(self.destination_index + 1, len(self.tour_plan) - 1)
 
-    def _car_ahead(
+    def _slot_occupied(
         self,
         slot: int,
         edge: DirectedEdge,

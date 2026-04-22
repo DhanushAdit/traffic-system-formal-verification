@@ -78,6 +78,15 @@ def test_car_stops_for_car_ahead():
     assert new_cs.slot == 5  # stayed
 
 
+def test_car_stops_for_any_visible_car_ahead_on_same_edge():
+    edge = DirectedEdge(frm=(0, 0), to=(1, 0))
+    v = _make_vehicle("car_1", edge, 5)
+    blocker = CarState(car_id="car_2", edge=edge, slot=20, driving_dir=Dir.E)
+    signals = _all_green()
+    new_cs = v.decide_move(signals, {"car_2": blocker}, {}, set())
+    assert new_cs.slot == 6
+
+
 def test_following_car_waits_behind_lead_car_at_red_light():
     reset_vehicle_step_state()
     edge = DirectedEdge(frm=(0, 0), to=(1, 0))

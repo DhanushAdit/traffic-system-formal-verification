@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from traffic_infra.geometry import DirectedEdge, Intersection
+from traffic_infra.constants import SLOTS_PER_SEGMENT
 from traffic_infra.state import CarState
 
-from .constants import MAX_CARS, PERIMETER_TOUR_ORDER, TERMINALS
-from .routing import all_tour_permutations, get_full_path
+from .constants import TERMINALS
+from .routing import best_tour_order, get_full_path
 from .vehicle import Vehicle
 # Import step registry so fleet and step share the same Vehicle objects
 from .step import _fleet_registry as _step_registry
@@ -15,7 +16,7 @@ from .step import _fleet_registry as _step_registry
 def _get_spawn_edge(order: list[str] | None = None) -> DirectedEdge:
     """First edge of a tour with the given order — always starts at terminal A's intersection."""
     if order is None:
-        order = PERIMETER_TOUR_ORDER
+        order = best_tour_order()
     return get_full_path(order)[0]
 
 
@@ -29,12 +30,10 @@ class Fleet:
 
     # ------------------------------------------------------------------ #
     def spawn_car(self) -> str | None:
-        """Place a new car on the fixed perimeter tour if the entry slot is free."""
-        if len(self.vehicles) >= MAX_CARS:
-            return None
-        order = list(PERIMETER_TOUR_ORDER)
+        """Spawn onto the best currently available route from A."""
+        occupied_edges = {v.current_edge for v in self.vehicles.values()}
+        order = best_tour_order(occupied_edges=occupied_edges, congestion_map=self.congestion_map)
         spawn_edge = _get_spawn_edge(order)
-        # Check slot 0 of spawn edge is clear
         for v in self.vehicles.values():
             if v.current_edge == spawn_edge and v.current_slot == 0:
                 return None
@@ -68,8 +67,13 @@ class Fleet:
             v.current_slot = new_cs.slot
             v.driving_dir = new_cs.driving_dir
 
-            # A tour completes only when the car enters terminal A after visiting B, C, and D.
-            if new_cs.edge.to == terminal_a and v.destination_index >= len(v.tour_plan) - 1:
+            # A tour completes only after the vehicle has fully traversed the
+            # final edge back to A, not when it merely enters that edge.
+            if (
+                new_cs.edge.to == terminal_a
+                and new_cs.slot == SLOTS_PER_SEGMENT - 1
+                and v.destination_index >= len(v.tour_plan) - 1
+            ):
                 v.completed_tours += 1
                 self.completed_tours += 1
                 completed_snapshot[car_id] = new_cs

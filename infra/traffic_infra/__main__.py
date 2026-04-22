@@ -20,7 +20,7 @@ def main() -> None:
         default=5,
         help="Number of 2s control steps to simulate.",
     )
-    parser.add_argument("--cars", type=int, default=1, help="Initial cars for the integrated run.")
+    parser.add_argument("--cars", type=int, default=4, help="Initial cars for the integrated run.")
     parser.add_argument(
         "--spawn-interval",
         type=int,

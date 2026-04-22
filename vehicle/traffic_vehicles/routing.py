@@ -66,8 +66,28 @@ def compute_tour_length(order: list[str]) -> int:
     return len(get_full_path(order)) * SLOTS_PER_SEGMENT
 
 
-def best_tour_order() -> list[str]:
-    return list(PERIMETER_TOUR_ORDER)
+def best_tour_order(
+    occupied_edges: set[DirectedEdge] | None = None,
+    congestion_map: dict[Intersection, int] | None = None,
+) -> list[str]:
+    occupied_edges = occupied_edges or set()
+    congestion_map = congestion_map or {}
+
+    best_order = list(PERIMETER_TOUR_ORDER)
+    best_score = float("inf")
+    for order in all_tour_permutations():
+        path = get_full_path(order)
+        score = len(path) * SLOTS_PER_SEGMENT
+        if path[0] in occupied_edges:
+            score += SLOTS_PER_SEGMENT * 100
+        for edge in path:
+            if edge in occupied_edges:
+                score += SLOTS_PER_SEGMENT * 3
+            score += congestion_map.get(edge.to, 0) * 5
+        if score < best_score:
+            best_score = score
+            best_order = list(order)
+    return best_order
 
 
 def dynamic_reroute(

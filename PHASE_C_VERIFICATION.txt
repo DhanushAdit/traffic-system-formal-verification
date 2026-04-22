@@ -1,0 +1,200 @@
+Traffic System Formal Verification
+Phase C Verification Guide (Infrastructure / I-Group)
+
+This document describes the formal verification artifacts added for the
+infrastructure / i-group Phase C submission, how they map to the current
+Python implementation, and how to run them.
+
+1. What was implemented
+
+The repository now contains these Phase C Promela models in `spin/`:
+
+- `spin/phase_c_i_group_safe.pml`
+  Safe abstract model used by the infrastructure team to verify the required
+  Phase C i-group traffic rules.
+- `spin/phase_c_i_group_unsafe.pml`
+  Intentionally broken vehicle model used to generate counterexample traces.
+
+There is also a convenience script:
+
+- `spin/run_phase_c_checks.sh`
+
+This script runs only the infrastructure / i-group SPIN checks and writes
+fresh outputs into:
+
+- `spin/output/phase_c/`
+
+2. Python-to-model mapping
+
+The safe i-group model is an abstraction of the final Python traffic protocol
+as checked by the infrastructure-side verifier:
+
+- `vehicle/traffic_vehicles/vehicle.py`
+  Slot-based move on an edge and guarded crossing at an intersection.
+- `vehicle/traffic_vehicles/step.py`
+  Priority order by larger slot index first.
+- `vehicle/traffic_vehicles/fleet.py`
+  Cars keep looping on the perimeter tour and are counted complete after
+  finishing the final edge back to A.
+- `vehicle/traffic_vehicles/routing.py`
+  The verified route abstraction is the perimeter loop A -> B -> C -> D -> A.
+- `infra/traffic_infra/checks.py`
+  The Promela properties map to the Python counters for collision, red-light,
+  U-turn, and illegal-direction violations.
+- `infra/traffic_infra/light_control.py`
+  The abstract signal phase is a deterministic rotating sequence of green
+  approaches.
+
+3. Properties covered
+
+3.1 I-group mandatory properties
+
+The safe i-group model verifies these properties:
+
+- `no_uturn`
+  No vehicle ever performs a U-turn.
+- `no_red_light`
+  No vehicle enters an intersection on red.
+- `no_collision`
+  No two vehicles occupy the same abstract slot.
+- `car0_visits_all`
+  Vehicle 0 eventually visits B, C, and D.
+- `car1_visits_all`
+  Vehicle 1 eventually visits B, C, and D.
+
+The extra self-choice property used here is:
+
+- `no_wrong_way`
+  No vehicle ever runs in a lane opposite its driving direction.
+
+4. Unsafe counterexample model
+
+`spin/phase_c_i_group_unsafe.pml` is an intentionally broken model used only
+to generate report screenshots / trails showing that SPIN detects violations
+when the protocol is broken.
+
+Suggested unsafe screenshots:
+
+- `no_red_light`
+- `no_collision`
+
+5. How to run the formal checks
+
+Prerequisites:
+
+- SPIN installed on the machine.
+- A C compiler installed (`cc` is enough for SPIN-generated `pan.c`).
+
+Install SPIN on Ubuntu / Debian if it is not already present:
+
+```bash
+sudo apt-get install spin
+```
+
+Verify installation:
+
+```bash
+spin -V
+cc --version
+```
+
+Run all i-group Phase C checks:
+
+```bash
+cd /run/user/1000/gvfs/sftp:host=olympus.ece.tamu.edu,user=dhanush_adithya/home/grads/d/dhanush_adithya/spr26/formal/traffic-system-formal-verification/spin
+chmod +x run_phase_c_checks.sh
+./run_phase_c_checks.sh
+```
+
+Outputs will be written under:
+
+```text
+spin/output/phase_c/
+```
+
+6. How to run individual checks
+
+6.1 I-group safe checks
+
+```bash
+cd /run/user/1000/gvfs/sftp:host=olympus.ece.tamu.edu,user=dhanush_adithya/home/grads/d/dhanush_adithya/spr26/formal/traffic-system-formal-verification/spin
+
+spin -run -ltl no_uturn        phase_c_i_group_safe.pml
+spin -run -ltl no_red_light    phase_c_i_group_safe.pml
+spin -run -ltl no_collision    phase_c_i_group_safe.pml
+spin -run -ltl no_wrong_way    phase_c_i_group_safe.pml
+spin -run -ltl car0_visits_all phase_c_i_group_safe.pml
+spin -run -ltl car1_visits_all phase_c_i_group_safe.pml
+```
+
+6.2 Unsafe counterexamples
+
+```bash
+spin -run -ltl no_red_light phase_c_i_group_unsafe.pml
+spin -run -ltl no_collision phase_c_i_group_unsafe.pml
+```
+
+Replay a counterexample trail:
+
+```bash
+spin -t -p phase_c_i_group_unsafe.pml
+```
+
+7. What to include in the report
+
+For the infrastructure / i-group report:
+
+- Describe the vehicle abstraction used in `phase_c_i_group_safe.pml`.
+- Show screenshots / terminal outputs for:
+  - `no_uturn`
+  - `no_red_light`
+  - `no_collision`
+  - `car0_visits_all`
+  - `car1_visits_all`
+  - `no_wrong_way`
+- Show at least one unsafe counterexample screenshot from
+  `phase_c_i_group_unsafe.pml`.
+- Ignore any older `v_group_*` files from previous experiments; the current
+  infrastructure script deletes old `.txt` outputs and regenerates only the
+  i-group files listed above.
+
+8. Python test / simulation commands
+
+Run the Python unit tests:
+
+```bash
+PYTHONPATH=infra:vehicle /tmp/traffic-system-venv/bin/python -m pytest infra/tests vehicle/tests -q
+```
+
+Run the 2-hour throughput simulation:
+
+```bash
+PYTHONPATH=infra:vehicle /tmp/traffic-system-venv/bin/python -m traffic_vehicles --hours 2 --cars 4 --spawn-interval 1
+```
+
+Current measured safe result from the final software design:
+
+- `completed_tours = 449`
+- `throughput_per_hour = 224.5`
+- all violation counters remain `0`
+
+9. Logging and debug workflow
+
+To save one full verification run to a log file:
+
+```bash
+cd /run/user/1000/gvfs/sftp:host=olympus.ece.tamu.edu,user=dhanush_adithya/home/grads/d/dhanush_adithya/spr26/formal/traffic-system-formal-verification/spin
+./run_phase_c_checks.sh 2>&1 | tee spin_out.txt
+```
+
+To save an individual property check to a log file:
+
+```bash
+spin -run -ltl no_collision phase_c_i_group_safe.pml 2>&1 | tee no_collision_debug.txt
+```
+
+To inspect only the verification verdicts from the generated outputs:
+
+```bash
+grep -Rni "errors:" output/phase_c
+```

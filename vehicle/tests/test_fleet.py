@@ -50,9 +50,9 @@ def test_throughput_per_minute_calculation():
 
 def test_multi_car_spawn():
     fleet = Fleet()
-    spawn_edge = _get_spawn_edge()
     id1 = fleet.spawn_car()
-    # Manually move first car off slot 0
+    # Slot-based protocol: once slot 0 is free, a new car may enter behind
+    # another car farther ahead on the same edge.
     v = fleet.vehicles[id1]
     v.current_slot = 5
     id2 = fleet.spawn_car()

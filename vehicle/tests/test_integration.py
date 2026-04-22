@@ -20,10 +20,10 @@ def test_integrated_simulation_moves_cars_without_violations():
     assert sim.sim.cumulative.intersection_crossing_violations == 0
 
 
-def test_integrated_simulation_can_seed_multiple_cars():
+def test_integrated_simulation_respects_single_legal_departure_lane():
     sim = IntegratedSimulation(spawn_interval=0, num_initial_cars=3)
 
-    assert len(sim.current_cars()) == 3
+    assert len(sim.current_cars()) == 1
     assert sim.throughput_per_minute() == 0.0
 
 

@@ -26,7 +26,7 @@ class IntegratedStepResult:
 class IntegratedSimulation:
     """Runs the full project loop: signals -> vehicle motion -> formal checks."""
 
-    def __init__(self, *, spawn_interval: int = 1, num_initial_cars: int = 1) -> None:
+    def __init__(self, *, spawn_interval: int = 1, num_initial_cars: int = 4) -> None:
         self.spawn_interval = spawn_interval
         self.num_initial_cars = num_initial_cars
         self.sim = InfraSimulation()
@@ -74,14 +74,10 @@ class IntegratedSimulation:
         return self.fleet.throughput_per_minute(self.step_count)
 
     def _spawn_initial_cars(self) -> None:
-        for idx in range(self.num_initial_cars):
+        for _ in range(self.num_initial_cars):
             car_id = self.fleet.spawn_car()
             if car_id is None:
                 break
-            if idx == self.num_initial_cars - 1:
-                continue
-            vehicle = self.fleet.vehicles[car_id]
-            vehicle.current_slot = min(idx + 1, 29)
 
     def _spawn_scheduled_car(self) -> str | None:
         if self.spawn_interval <= 0:

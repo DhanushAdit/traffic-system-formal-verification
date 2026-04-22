@@ -1,0 +1,93 @@
+pan: ltl formula no_collision
+
+(Spin Version 6.5.2 -- 6 December 2019)
+	+ Partial Order Reduction
+
+Full statespace search for:
+	never claim         	+ (no_collision)
+	assertion violations	+ (if within scope of claim)
+	acceptance   cycles 	+ (fairness disabled)
+	invalid end states	- (disabled by never claim)
+
+State-vector 60 byte, depth reached 938, errors: 0
+       44 states, stored
+        1 states, matched
+       45 transitions (= stored+matched)
+      851 atomic steps
+hash conflicts:         0 (resolved)
+
+Stats on memory usage (in Megabytes):
+    0.004	equivalent memory usage for states (stored*(State-vector + overhead))
+    0.237	actual memory usage for states
+  128.000	memory used for hash table (-w24)
+    0.534	memory used for DFS stack (-m10000)
+  128.730	total actual memory usage
+
+
+unreached in proctype System
+	phase_c_i_group_safe.pml:65, state 37, "(1)"
+	phase_c_i_group_safe.pml:62, state 40, "((edge[0]==0))"
+	phase_c_i_group_safe.pml:62, state 40, "((edge[0]==1))"
+	phase_c_i_group_safe.pml:62, state 40, "((edge[0]==2))"
+	phase_c_i_group_safe.pml:62, state 40, "else"
+	phase_c_i_group_safe.pml:56, state 50, "want = 3"
+	phase_c_i_group_safe.pml:53, state 53, "((edge[0]==0))"
+	phase_c_i_group_safe.pml:53, state 53, "((edge[0]==1))"
+	phase_c_i_group_safe.pml:53, state 53, "((edge[0]==2))"
+	phase_c_i_group_safe.pml:53, state 53, "else"
+	phase_c_i_group_safe.pml:131, state 70, "next_edge = ((edge[1]+1)%4)"
+	phase_c_i_group_safe.pml:65, state 89, "(1)"
+	phase_c_i_group_safe.pml:62, state 92, "((edge[1]==0))"
+	phase_c_i_group_safe.pml:62, state 92, "((edge[1]==1))"
+	phase_c_i_group_safe.pml:62, state 92, "((edge[1]==2))"
+	phase_c_i_group_safe.pml:62, state 92, "else"
+	phase_c_i_group_safe.pml:56, state 102, "want = 3"
+	phase_c_i_group_safe.pml:53, state 105, "((edge[1]==0))"
+	phase_c_i_group_safe.pml:53, state 105, "((edge[1]==1))"
+	phase_c_i_group_safe.pml:53, state 105, "((edge[1]==2))"
+	phase_c_i_group_safe.pml:53, state 105, "else"
+	phase_c_i_group_safe.pml:137, state 107, "((phase!=edge[1]))"
+	phase_c_i_group_safe.pml:137, state 107, "(((edge[0]==next_edge)&&(slot[0]==0)))"
+	phase_c_i_group_safe.pml:137, state 107, "else"
+	phase_c_i_group_safe.pml:65, state 142, "(1)"
+	phase_c_i_group_safe.pml:62, state 145, "((edge[1]==0))"
+	phase_c_i_group_safe.pml:62, state 145, "((edge[1]==1))"
+	phase_c_i_group_safe.pml:62, state 145, "((edge[1]==2))"
+	phase_c_i_group_safe.pml:62, state 145, "else"
+	phase_c_i_group_safe.pml:56, state 155, "want = 3"
+	phase_c_i_group_safe.pml:53, state 158, "((edge[1]==0))"
+	phase_c_i_group_safe.pml:53, state 158, "((edge[1]==1))"
+	phase_c_i_group_safe.pml:53, state 158, "((edge[1]==2))"
+	phase_c_i_group_safe.pml:53, state 158, "else"
+	phase_c_i_group_safe.pml:102, state 175, "next_edge = ((edge[0]+1)%4)"
+	phase_c_i_group_safe.pml:65, state 194, "(1)"
+	phase_c_i_group_safe.pml:62, state 197, "((edge[0]==0))"
+	phase_c_i_group_safe.pml:62, state 197, "((edge[0]==1))"
+	phase_c_i_group_safe.pml:62, state 197, "((edge[0]==2))"
+	phase_c_i_group_safe.pml:62, state 197, "else"
+	phase_c_i_group_safe.pml:56, state 207, "want = 3"
+	phase_c_i_group_safe.pml:53, state 210, "((edge[0]==0))"
+	phase_c_i_group_safe.pml:53, state 210, "((edge[0]==1))"
+	phase_c_i_group_safe.pml:53, state 210, "((edge[0]==2))"
+	phase_c_i_group_safe.pml:53, state 210, "else"
+	phase_c_i_group_safe.pml:108, state 212, "((phase!=edge[0]))"
+	phase_c_i_group_safe.pml:108, state 212, "(((edge[1]==next_edge)&&(slot[1]==0)))"
+	phase_c_i_group_safe.pml:108, state 212, "else"
+	phase_c_i_group_safe.pml:166, state 372, "-end-"
+	(21 of 372 states)
+unreached in claim no_collision
+	_spin_nvr.tmp:26, state 10, "-end-"
+	(1 of 10 states)
+
+pan: elapsed time 0.04 seconds
+pan: rate      1100 states/second
+ltl no_uturn: [] (! (uturn_violation))
+ltl no_red_light: [] (! (red_violation))
+ltl no_collision: [] (! (collision_violation))
+ltl no_wrong_way: [] (! (wrong_way_violation))
+ltl car0_visits_all: <> (((visited_b[0]) && (visited_c[0])) && (visited_d[0]))
+ltl car1_visits_all: <> (((visited_b[1]) && (visited_c[1])) && (visited_d[1]))
+  the model contains 6 never claims: car1_visits_all, car0_visits_all, no_wrong_way, no_collision, no_red_light, no_uturn
+  only one claim is used in a verification run
+  choose which one with ./pan -a -N name (defaults to -N no_uturn)
+  or use e.g.: spin -search -ltl no_uturn phase_c_i_group_safe.pml
